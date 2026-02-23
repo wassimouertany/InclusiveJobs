@@ -1,0 +1,14 @@
+# Environnement virtuel
+venv/
+env/
+
+# Variables d'environnement (NE JAMAIS POUSSER LE .env)
+.env
+
+# Fichiers Python compilés
+__pycache__/
+*.pyc
+
+# Dossiers spécifiques aux éditeurs (Cursor, VSCode)
+.vscode/
+.cursorrules
