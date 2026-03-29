@@ -12,7 +12,7 @@ fs = AsyncIOMotorGridFSBucket(db)
 
 
 async def ping_db() -> bool:
-    """Vérifie la connexion à la base de données MongoDB au démarrage."""
+    """Check MongoDB connection on startup."""
     try:
         await client.admin.command("ping")
         return True

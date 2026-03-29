@@ -41,3 +41,23 @@ Contrairement aux plateformes classiques, InclusiveJobs utilise l'**Intelligence
 | **Axios** | Appels API REST |
 
 ---
+
+## ▶️ Lancer le backend
+
+Depuis la racine du projet :
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+Ou en une ligne depuis la racine (avec le bon répertoire de travail) :
+
+```bash
+cd backend && uvicorn main:app --reload
+```
+
+L’API sera disponible sur **http://localhost:8000**. La doc Swagger : **http://localhost:8000/docs**.
+
+---
