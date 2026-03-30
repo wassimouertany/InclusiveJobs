@@ -1,94 +1,39 @@
-import { AnimatePresence, motion } from 'motion/react';
-import Navbar from './components/Navbar';
-import Hero from './components/Hero';
-import Stats from './components/Stats';
-import HowItWorks from './components/HowItWorks';
-import Features from './components/Features';
-import Testimonials from './components/Testimonials';
-import Footer from './components/Footer';
-import Login from './components/Login';
-import FindJobs from './components/FindJobs';
-import ForEmployers from './components/ForEmployers';
-import Dashboard from './components/Dashboard';
-import AccessibilityWidget from './components/AccessibilityWidget';
-import { NavigationProvider, useNavigation } from './context/NavigationContext';
-import { ToastProvider } from './context/ToastContext';
+import type { ReactNode } from "react";
+import { Route, Routes } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import Hero from "./components/Hero";
+import Stats from "./components/Stats";
+import HowItWorks from "./components/HowItWorks";
+import Features from "./components/Features";
+import Testimonials from "./components/Testimonials";
+import Footer from "./components/Footer";
+import Login from "./components/Login";
+import FindJobs from "./components/FindJobs";
+import ForEmployers from "./components/ForEmployers";
+import Dashboard from "./components/Dashboard";
+import CandidateDashboard from "./components/CandidateDashboard";
+import AccessibilityWidget from "./components/AccessibilityWidget";
+import RecruiterDashboard from "./components/RecruiterDashboard";
 
-function AppContent() {
-  const { currentPage } = useNavigation();
+function LandingPage() {
+  return (
+    <>
+      <Hero />
+      <Stats />
+      <HowItWorks />
+      <Features />
+      <Testimonials />
+    </>
+  );
+}
 
+function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col font-sans text-text-primary bg-bg-page">
       <Navbar />
-      
-      <main className="flex-grow relative">
-        <AnimatePresence mode="wait">
-          {currentPage === 'landing' && (
-            <motion.div
-              key="landing"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Hero />
-              <Stats />
-              <HowItWorks />
-              <Features />
-              <Testimonials />
-            </motion.div>
-          )}
-
-          {currentPage === 'login' && (
-            <motion.div
-              key="login"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Login />
-            </motion.div>
-          )}
-
-          {currentPage === 'find-jobs' && (
-            <motion.div
-              key="find-jobs"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <FindJobs />
-            </motion.div>
-          )}
-
-          {currentPage === 'employers' && (
-            <motion.div
-              key="employers"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <ForEmployers />
-            </motion.div>
-          )}
-
-          {currentPage === 'dashboard' && (
-            <motion.div
-              key="dashboard"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Dashboard />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
-
+      {/* Avoid AnimatePresence + motion around <Routes>: it re-renders Routes with the
+          new URL during exit and can leave the main area blank (e.g. /dashboard/recruiter). */}
+      <main className="flex-grow relative">{children}</main>
       <Footer />
       <AccessibilityWidget />
     </div>
@@ -97,10 +42,16 @@ function AppContent() {
 
 export default function App() {
   return (
-    <NavigationProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
-    </NavigationProvider>
+    <AppShell>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/find-jobs" element={<FindJobs />} />
+        <Route path="/employers" element={<ForEmployers />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/recruiter" element={<RecruiterDashboard />} />
+        <Route path="/dashboard/candidate" element={<CandidateDashboard />} />
+      </Routes>
+    </AppShell>
   );
 }

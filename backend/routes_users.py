@@ -7,7 +7,12 @@ from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import Json
 
-from auth import create_access_token, get_current_admin, verify_password
+from auth import (
+    create_access_token,
+    get_current_admin,
+    get_current_candidate,
+    verify_password,
+)
 from database import db, fs
 from utils import upload_file_to_gridfs
 from models import (
