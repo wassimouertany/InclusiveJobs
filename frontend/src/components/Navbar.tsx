@@ -1,17 +1,34 @@
-import { useState } from 'react';
-import { User, Menu, X, Heart } from 'lucide-react';
-import { useNavigation } from '../context/NavigationContext';
-import { Page } from '../types';
+import { useState } from "react";
+import { User, Menu, X, Heart } from "lucide-react";
+import { useNavigation } from "../context/NavigationContext";
+import {
+  AUTH_ROLE_KEY,
+  AUTH_TOKEN_KEY,
+  AUTH_USER_ID_KEY,
+} from "../config/auth";
+import { Page } from "../types";
 
 export default function Navbar() {
   const { currentPage, navigate } = useNavigation();
-  const [lang, setLang] = useState<'EN' | 'FR' | 'AR'>('EN');
+  const [lang, setLang] = useState<"EN" | "FR" | "AR">("EN");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  const isDashboard =
+    currentPage === "dashboard" ||
+    currentPage === "dashboard-recruiter" ||
+    currentPage === "dashboard-candidate";
+
+  const handleLogout = () => {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_ROLE_KEY);
+    localStorage.removeItem(AUTH_USER_ID_KEY);
+    navigate("landing");
+  };
+
   const navLinks: { id: Page; label: string }[] = [
-    { id: 'landing', label: 'Home' },
-    { id: 'find-jobs', label: 'Find Jobs' },
-    { id: 'employers', label: 'For Employers' },
+    { id: "landing", label: "Home" },
+    { id: "find-jobs", label: "Find Jobs" },
+    { id: "employers", label: "For Employers" },
   ];
 
   return (
@@ -19,9 +36,9 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-20 items-center">
           {/* Logo */}
-          <div 
-            className="flex items-center cursor-pointer group" 
-            onClick={() => navigate('landing')}
+          <div
+            className="flex items-center cursor-pointer group"
+            onClick={() => navigate("landing")}
           >
             <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center mr-3 shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
               <Heart className="text-white w-6 h-6 fill-current" />
@@ -73,26 +90,27 @@ export default function Navbar() {
 
             {/* CTA Buttons */}
             <div className="flex items-center space-x-3">
-              {currentPage !== 'login' && currentPage !== 'dashboard' && (
-                 <button 
-                 onClick={() => navigate('login')}
-                 className="flex items-center px-4 py-2.5 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-colors font-medium text-sm"
-               >
-                 <User className="w-4 h-4 mr-2" />
-                 Sign In
-               </button>
+              {currentPage !== "login" && !isDashboard && (
+                <button
+                  onClick={() => navigate("login")}
+                  className="flex items-center px-4 py-2.5 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-colors font-medium text-sm"
+                >
+                  <User className="w-4 h-4 mr-2" />
+                  Sign In
+                </button>
               )}
-             
-              {currentPage === 'dashboard' ? (
-                <button 
-                  onClick={() => navigate('landing')}
+
+              {isDashboard ? (
+                <button
+                  type="button"
+                  onClick={handleLogout}
                   className="px-5 py-2.5 bg-gray-100 text-text-primary rounded-xl hover:bg-gray-200 transition-all font-medium text-sm"
                 >
                   Log Out
                 </button>
               ) : (
-                <button 
-                  onClick={() => navigate('employers')}
+                <button
+                  onClick={() => navigate("employers")}
                   className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark transition-all shadow-md hover:shadow-lg shadow-primary/20 font-medium text-sm transform hover:-translate-y-0.5"
                 >
                   Post a Job
@@ -152,24 +170,39 @@ export default function Navbar() {
           </div>
           
           <div className="grid grid-cols-2 gap-3 pt-2">
-            <button 
-              onClick={() => {
-                navigate('login');
-                setIsMenuOpen(false);
-              }}
-              className="flex justify-center items-center px-4 py-3 border border-border text-text-primary rounded-xl hover:bg-gray-50 transition-colors font-medium"
-            >
-              Sign In
-            </button>
-            <button 
-              onClick={() => {
-                navigate('employers');
-                setIsMenuOpen(false);
-              }}
-              className="px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark transition-colors font-medium shadow-lg shadow-primary/20"
-            >
-              Post a Job
-            </button>
+            {isDashboard ? (
+              <button
+                type="button"
+                onClick={() => {
+                  handleLogout();
+                  setIsMenuOpen(false);
+                }}
+                className="col-span-2 flex justify-center items-center px-4 py-3 bg-gray-100 text-text-primary rounded-xl hover:bg-gray-200 transition-colors font-medium"
+              >
+                Log Out
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    navigate("login");
+                    setIsMenuOpen(false);
+                  }}
+                  className="flex justify-center items-center px-4 py-3 border border-border text-text-primary rounded-xl hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => {
+                    navigate("employers");
+                    setIsMenuOpen(false);
+                  }}
+                  className="px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark transition-colors font-medium shadow-lg shadow-primary/20"
+                >
+                  Post a Job
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

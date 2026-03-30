@@ -1,23 +1,45 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
-import { Page } from '../types';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  type ReactNode,
+} from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { pageToPath, pathToPage } from "../navigation/routes";
+import type { Page } from "../types";
 
 interface NavigationContextType {
   currentPage: Page;
   navigate: (page: Page) => void;
 }
 
-const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
+const NavigationContext = createContext<NavigationContextType | undefined>(
+  undefined
+);
 
 export function NavigationProvider({ children }: { children: ReactNode }) {
-  const [currentPage, setCurrentPage] = useState<Page>('landing');
+  const routerNavigate = useNavigate();
+  const location = useLocation();
 
-  const navigate = (page: Page) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  const navigate = useCallback(
+    (page: Page) => {
+      routerNavigate(pageToPath(page));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [routerNavigate]
+  );
+
+  const value = useMemo(
+    () => ({
+      currentPage: pathToPage(location.pathname),
+      navigate,
+    }),
+    [location.pathname, navigate]
+  );
 
   return (
-    <NavigationContext.Provider value={{ currentPage, navigate }}>
+    <NavigationContext.Provider value={value}>
       {children}
     </NavigationContext.Provider>
   );
@@ -26,7 +48,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 export function useNavigation() {
   const context = useContext(NavigationContext);
   if (context === undefined) {
-    throw new Error('useNavigation must be used within a NavigationProvider');
+    throw new Error("useNavigation must be used within a NavigationProvider");
   }
   return context;
 }

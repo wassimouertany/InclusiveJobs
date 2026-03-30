@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Search, MapPin, Filter, Building2, Clock, Star, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useToast } from '../context/ToastContext';
