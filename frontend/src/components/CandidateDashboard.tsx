@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   Bell,
@@ -98,6 +98,59 @@ export default function CandidateDashboard() {
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [avatarBlobUrl, setAvatarBlobUrl] = useState<string | null>(null);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+  const avatarBlobRef = useRef<string | null>(null);
+
+  const revokeAvatarBlob = useCallback(() => {
+    if (avatarBlobRef.current) {
+      URL.revokeObjectURL(avatarBlobRef.current);
+      avatarBlobRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+    if (!profile?.logo_id) {
+      revokeAvatarBlob();
+      setAvatarBlobUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/users/candidates/me/profile-photo`,
+          {
+            headers: {
+              ...getAuthHeaders(),
+              Accept: "image/*,*/*",
+            },
+          }
+        );
+        if (!res.ok || cancelled) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        revokeAvatarBlob();
+        const url = URL.createObjectURL(blob);
+        avatarBlobRef.current = url;
+        setAvatarBlobUrl(url);
+      } catch {
+        if (!cancelled) {
+          revokeAvatarBlob();
+          setAvatarBlobUrl(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      revokeAvatarBlob();
+      setAvatarBlobUrl(null);
+    };
+  }, [profile?.logo_id, revokeAvatarBlob]);
 
   const loadProfile = useCallback(async () => {
     const token = getStoredToken();
@@ -358,9 +411,24 @@ export default function CandidateDashboard() {
               <p className="font-bold text-gray-700 dark:text-gray-300 mb-1">
                 Profile photo
               </p>
-              <p className="text-gray-600 dark:text-gray-400">
-                {profile.logo_id ? "Uploaded (stored)" : "Not uploaded"}
-              </p>
+              {!profile.logo_id ? (
+                <p className="text-gray-600 dark:text-gray-400">Not uploaded</p>
+              ) : avatarBlobUrl && !avatarLoadFailed ? (
+                <img
+                  src={avatarBlobUrl}
+                  alt=""
+                  className="mt-2 w-20 h-20 rounded-lg object-cover border border-gray-200 dark:border-gray-600"
+                  onError={() => setAvatarLoadFailed(true)}
+                />
+              ) : avatarLoadFailed ? (
+                <p className="text-gray-600 dark:text-gray-400">
+                  Could not load preview
+                </p>
+              ) : (
+                <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
+                  Loading preview…
+                </p>
+              )}
             </div>
             <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700">
               <p className="font-bold text-gray-700 dark:text-gray-300 mb-1">
@@ -604,8 +672,17 @@ export default function CandidateDashboard() {
           <div className="lg:col-span-1">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 sticky top-24">
               <div className="flex items-center space-x-4 mb-8">
-                <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white font-bold text-xl shrink-0">
-                  {initials(profile?.first_name, profile?.last_name)}
+                <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white font-bold text-xl shrink-0 overflow-hidden ring-2 ring-gray-100 dark:ring-gray-700">
+                  {avatarBlobUrl && !avatarLoadFailed ? (
+                    <img
+                      src={avatarBlobUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={() => setAvatarLoadFailed(true)}
+                    />
+                  ) : (
+                    initials(profile?.first_name, profile?.last_name)
+                  )}
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-bold text-gray-900 dark:text-white truncate">

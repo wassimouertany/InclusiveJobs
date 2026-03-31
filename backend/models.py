@@ -101,6 +101,9 @@ class CandidateDB(BaseModel):
     disability_card_id: Optional[str] = None
     resume_id: Optional[str] = None
 
+    # Plain text from resume PDF (pdfplumber + OCR fallback at registration)
+    resume_text_raw: str = ""
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @field_validator("id", mode="before")

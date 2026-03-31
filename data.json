@@ -1,0 +1,142 @@
+[
+    {
+      "role": "RECRUITER",
+      "email": "hr@techcorp.tn",
+      "password": "REPLACE_WITH_BCRYPT_HASH",
+      "company_name": "TechCorp Tunisia",
+      "company_industry": "Software",
+      "phone_number": "+216 71 000 001",
+      "location": "Tunis",
+      "founded_year": 2015,
+      "employee_count": 120,
+      "employees_with_disability": 8,
+      "inclusion_strategy": "Remote-first, ergonomic assessments, flexible hours.",
+      "logo_id": null,
+      "created_at": { "$date": "2025-01-10T09:00:00.000Z" }
+    },
+    {
+      "role": "RECRUITER",
+      "email": "talent@innovatetech.tn",
+      "password": "REPLACE_WITH_BCRYPT_HASH",
+      "company_name": "InnovateTech",
+      "company_industry": "FinTech",
+      "phone_number": "+216 71 000 002",
+      "location": "Lac 2, Tunis",
+      "founded_year": 2019,
+      "employee_count": 45,
+      "employees_with_disability": 3,
+      "inclusion_strategy": "Partner with accessibility consultants for workspace design.",
+      "logo_id": null,
+      "created_at": { "$date": "2025-02-01T10:30:00.000Z" }
+    }
+  ]
+
+
+
+
+
+
+
+
+
+
+[
+    {
+      "role": "CANDIDATE",
+      "last_name": "Ben Ali",
+      "first_name": "Sara",
+      "birth_date": "1996-04-12",
+      "email": "sara.benali@example.com",
+      "password": "REPLACE_WITH_BCRYPT_HASH",
+      "phone_number": "+216 98 111 222",
+      "address": "Ariana, Tunisia",
+      "industry": "IT",
+      "gender": "female",
+      "years_of_experience": 3,
+      "education_level": "bachelors",
+      "work_accommodations": ["remote_work", "flexible_schedule"],
+      "profile_title": "Frontend Developer",
+      "key_skills": ["React", "TypeScript", "Accessibility"],
+      "disability_type": "visual",
+      "accessibility_needs": "Screen reader compatible workflows; high-contrast UI.",
+      "work_preference": "fully_remote",
+      "availability_status": "actively_looking",
+      "logo_id": null,
+      "disability_card_id": null,
+      "resume_id": null,
+      "created_at": { "$date": "2025-03-01T14:00:00.000Z" }
+    },
+    {
+      "role": "CANDIDATE",
+      "last_name": "Trabelsi",
+      "first_name": "Amine",
+      "birth_date": "1992-11-03",
+      "email": "amine.trabelsi@example.com",
+      "password": "REPLACE_WITH_BCRYPT_HASH",
+      "phone_number": "+216 22 333 444",
+      "address": "Sfax, Tunisia",
+      "industry": "Engineering",
+      "gender": "male",
+      "years_of_experience": 7,
+      "education_level": "engineering_degree",
+      "work_accommodations": ["accessible_premises"],
+      "profile_title": "Software Engineer",
+      "key_skills": ["Python", "FastAPI", "MongoDB"],
+      "disability_type": "motor",
+      "accessibility_needs": "Wheelchair-accessible office; parking nearby.",
+      "work_preference": "hybrid",
+      "availability_status": "actively_looking",
+      "logo_id": null,
+      "disability_card_id": null,
+      "resume_id": null,
+      "created_at": { "$date": "2025-03-05T11:20:00.000Z" }
+    }
+  ]
+
+
+
+
+  [
+    {
+      "recruiter_id": "PASTE_RECRUITER_1_OBJECTID_STRING",
+      "title": "Frontend Developer (Accessibility)",
+      "description": "Build inclusive UIs with React; WCAG 2.1 AA compliance.",
+      "required_skills": ["React", "TypeScript", "WCAG"],
+      "document_id": null,
+      "profile_title": "Frontend Developer",
+      "contract_type": "permanent",
+      "key_skills": ["React", "TypeScript", "Tailwind"],
+      "working_conditions": "Full-time, remote-friendly, core hours 10–16 CET.",
+      "possible_accommodations": "Screen reader testing workflow; flexible breaks; ergonomic equipment.",
+      "status": "open",
+      "created_at": { "$date": "2025-03-10T08:00:00.000Z" }
+    },
+    {
+      "recruiter_id": "PASTE_RECRUITER_1_OBJECTID_STRING",
+      "title": "Backend Engineer — APIs & MongoDB",
+      "description": "Design and maintain REST APIs for our hiring platform.",
+      "required_skills": ["Python", "FastAPI", "MongoDB"],
+      "document_id": null,
+      "profile_title": "Backend Developer",
+      "contract_type": "fixed_term",
+      "key_skills": ["Python", "Docker", "Git"],
+      "working_conditions": "Hybrid Tunis; 12-month CDD with renewal option.",
+      "possible_accommodations": "Quiet workspace; written meeting summaries.",
+      "status": "open",
+      "created_at": { "$date": "2025-03-12T09:15:00.000Z" }
+    },
+    {
+      "recruiter_id": "PASTE_RECRUITER_2_OBJECTID_STRING",
+      "title": "Product Designer (Inclusive UX)",
+      "description": "Lead design for accessible financial products.",
+      "required_skills": ["Figma", "User research", "Accessibility"],
+      "document_id": null,
+      "profile_title": "UX / Product Designer",
+      "contract_type": "permanent",
+      "key_skills": ["Figma", "Prototyping", "Design systems"],
+      "working_conditions": "Full-time; Lac 2 office 3 days/week.",
+      "possible_accommodations": "Adjustable desk; captioning for workshops.",
+      "status": "open",
+      "created_at": { "$date": "2025-03-15T10:00:00.000Z" }
+    }
+  ]
