@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
-import { AppView, UserRole, HandicapType, Language } from "../types";
+import {
+  AppView,
+  UserRole,
+  HandicapType,
+  Language,
+  EducationLevel,
+} from "../types";
 import { Input, Button, ProgressBar } from "./UI";
 import {
   Eye,
@@ -72,6 +78,50 @@ async function readErrorDetail(response: Response): Promise<string> {
   }
 }
 
+type ExtractDocumentsResponse = {
+  resume: {
+    first_name: string;
+    last_name: string;
+    birth_date: string;
+    email: string;
+    phone_number: string;
+    address: string;
+    industry: string;
+    education_level: string;
+    gender: string;
+    profile_title: string;
+    key_skills: string[];
+    years_of_experience: number;
+  } | null;
+  disability_card: {
+    disability_type: string;
+    card_number: string;
+    expiry_date: string;
+    first_name: string;
+    last_name: string;
+    birth_date: string;
+  } | null;
+};
+
+function isValidDisabilityType(value: string): value is HandicapType {
+  return (Object.values(HandicapType) as string[]).includes(value);
+}
+
+function isValidEducationLevel(value: string): value is EducationLevel {
+  return (Object.values(EducationLevel) as string[]).includes(value as EducationLevel);
+}
+
+const EDUCATION_LEVEL_LABELS: Record<EducationLevel, string> = {
+  [EducationLevel.NO_DEGREE]: "No Degree",
+  [EducationLevel.HIGH_SCHOOL]: "High School",
+  [EducationLevel.VOCATIONAL_TRAINING]: "Vocational Training",
+  [EducationLevel.BACHELORS]: "Bachelors",
+  [EducationLevel.MASTERS]: "Masters",
+  [EducationLevel.ENGINEERING_DEGREE]: "Engineering Degree",
+  [EducationLevel.DOCTORATE]: "Doctorate",
+  [EducationLevel.OTHER]: "Other",
+};
+
 const translations = {
   en: {
     welcome: "Welcome Back",
@@ -87,6 +137,16 @@ const translations = {
     continue: "Continue",
     back: "Back",
     launch: "Launch Workplace",
+    accountType: "Choose account type",
+    accountTypeHint:
+      "Next, upload your disability card and résumé — we’ll read them and fill most of the form for you.",
+    smartStart: "Drop your documents",
+    smartStartDesc:
+      "Upload your disability card and your résumé (PDF). The résumé fills name, contact, education, job title, skills, and experience; the card adds disability type and ID details. Everything stays editable.",
+    disabilityCardUpload: "Disability card",
+    almostThere: "Review & finish",
+    almostThereDesc:
+      "Add a profile photo if you like, describe any extra accessibility needs, then create your account.",
     basicInfo: "Basic Account Setup",
     medicalProfile: "Accessibility Profile",
     professionalExp: "Professional Experience",
@@ -143,6 +203,16 @@ const translations = {
     continue: "Continuer",
     back: "Retour",
     launch: "Lancer l'espace",
+    accountType: "Type de compte",
+    accountTypeHint:
+      "Ensuite, téléchargez votre carte de handicap et votre CV — nous remplirons la majeure partie du formulaire.",
+    smartStart: "Déposez vos documents",
+    smartStartDesc:
+      "Carte de handicap (image ou PDF) et CV (PDF). OCR + IA : nom, date de naissance, type de handicap, titre, compétences et expérience — modifiable ensuite.",
+    disabilityCardUpload: "Carte de handicap",
+    almostThere: "Vérifier et terminer",
+    almostThereDesc:
+      "Photo de profil optionnelle, besoins d’accessibilité, puis création du compte.",
     basicInfo: "Configuration de base",
     medicalProfile: "Profil d'accessibilité",
     professionalExp: "Expérience professionnelle",
@@ -199,6 +269,16 @@ const translations = {
     continue: "متابعة",
     back: "رجوع",
     launch: "إطلاق المنصة",
+    accountType: "نوع الحساب",
+    accountTypeHint:
+      "بعدها ارفع بطاقة الإعاقة والسيرة الذاتية — سنملأ معظم الحقول تلقائياً.",
+    smartStart: "ارفع مستنداتك",
+    smartStartDesc:
+      "بطاقة الإعاقة (صورة أو PDF) والسيرة (PDF). الذكاء الاصطناعي يملأ الاسم وتاريخ الميلاد ونوع الإعاقة والمهارات والخبرة — يمكن التعديل لاحقاً.",
+    disabilityCardUpload: "بطاقة الإعاقة",
+    almostThere: "مراجعة وإنهاء",
+    almostThereDesc:
+      "صورة شخصية اختيارية، ثم وصف احتياجاتك، ثم إنشاء الحساب.",
     basicInfo: "إعداد الحساب الأساسي",
     medicalProfile: "ملف الوصول",
     professionalExp: "الخبرة المهنية",
@@ -288,6 +368,13 @@ export default function Login() {
     disability_card: null as File | null,
     resume: null as File | null,
   });
+  const [docExtractBusy, setDocExtractBusy] = useState(false);
+  const [disabilityCardExtract, setDisabilityCardExtract] = useState<{
+    card_number: string;
+    expiry_date: string;
+  } | null>(null);
+  /** Avoid showing default "male" in step-2 preview before résumé supplied gender */
+  const [genderFromResumeExtract, setGenderFromResumeExtract] = useState(false);
 
   // Company Data State
   const [companyData, setCompanyData] = useState({
@@ -309,7 +396,7 @@ export default function Login() {
 
   const [cvText, setCvText] = useState("");
 
-  const totalSteps = role === UserRole.CANDIDATE ? 4 : 3;
+  const totalSteps = role === UserRole.CANDIDATE ? 6 : 3;
 
   useEffect(() => {
     if (headingRef.current) {
@@ -322,6 +409,116 @@ export default function Login() {
 
   const toggleHandicap = (type: HandicapType) => {
     setCandidateData({ ...candidateData, disability_type: type });
+  };
+
+  const extractDocuments = async (files: {
+    resume?: File;
+    disability_card?: File;
+  }) => {
+    if (!files.resume && !files.disability_card) return;
+    if (!files.resume) setGenderFromResumeExtract(false);
+    setDocExtractBusy(true);
+    try {
+      const formData = new FormData();
+      if (files.resume) formData.append("resume", files.resume);
+      if (files.disability_card)
+        formData.append("disability_card", files.disability_card);
+      const res = await fetch(
+        `${API_BASE_URL}/users/candidates/extract-documents`,
+        { method: "POST", body: formData }
+      );
+      if (!res.ok) {
+        showToast(await readErrorDetail(res), "error");
+        return;
+      }
+      const data = (await res.json()) as ExtractDocumentsResponse;
+      let appliedSomething = false;
+      if (data.resume) {
+        const r = data.resume;
+        const bdRaw = r.birth_date?.trim().slice(0, 10) ?? "";
+        const validBd = /^\d{4}-\d{2}-\d{2}$/.test(bdRaw) ? bdRaw : "";
+        const eduRaw = r.education_level?.trim() ?? "";
+        const validEdu = isValidEducationLevel(eduRaw) ? eduRaw : null;
+        const genRaw = r.gender?.trim().toLowerCase();
+        const validGen =
+          genRaw === "male" || genRaw === "female" ? genRaw : null;
+        const hasTitle = !!r.profile_title?.trim();
+        const hasSkills = (r.key_skills?.length ?? 0) > 0;
+        const y = r.years_of_experience;
+        const resumeFillsSomething =
+          !!(
+            r.first_name?.trim() ||
+            r.last_name?.trim() ||
+            validBd ||
+            r.email?.trim() ||
+            r.phone_number?.trim() ||
+            r.address?.trim() ||
+            r.industry?.trim() ||
+            validEdu ||
+            validGen ||
+            hasTitle ||
+            hasSkills ||
+            (typeof y === "number" && y > 0)
+          );
+        if (resumeFillsSomething) appliedSomething = true;
+        setGenderFromResumeExtract(!!validGen);
+        setCandidateData((prev) => {
+          const hasYears =
+            typeof y === "number" && (y > 0 || prev.years_of_experience === 0);
+          const next = { ...prev };
+          if (r.first_name?.trim()) next.first_name = r.first_name.trim();
+          if (r.last_name?.trim()) next.last_name = r.last_name.trim();
+          if (validBd) next.birth_date = validBd;
+          if (r.email?.trim()) next.email = r.email.trim();
+          if (r.phone_number?.trim()) next.phone_number = r.phone_number.trim();
+          if (r.address?.trim()) next.address = r.address.trim();
+          if (r.industry?.trim()) next.industry = r.industry.trim();
+          if (validEdu) next.education_level = validEdu;
+          if (validGen) next.gender = validGen;
+          if (hasTitle) next.profile_title = r.profile_title.trim();
+          if (hasSkills) next.key_skills = r.key_skills;
+          if (hasYears) next.years_of_experience = y;
+          return next;
+        });
+      }
+      if (data.disability_card) {
+        const d = data.disability_card;
+        const fn = d.first_name?.trim();
+        const ln = d.last_name?.trim();
+        const bdRaw = d.birth_date?.trim().slice(0, 10) ?? "";
+        const validBd = /^\d{4}-\d{2}-\d{2}$/.test(bdRaw) ? bdRaw : "";
+        const dt = d.disability_type?.trim();
+        const hasDt = dt && isValidDisabilityType(dt);
+        if (fn || ln || validBd || hasDt) {
+          appliedSomething = true;
+          setCandidateData((prev) => ({
+            ...prev,
+            ...(fn ? { first_name: fn } : {}),
+            ...(ln ? { last_name: ln } : {}),
+            ...(validBd ? { birth_date: validBd } : {}),
+            ...(hasDt ? { disability_type: dt } : {}),
+          }));
+        }
+        const cn = d.card_number?.trim() ?? "";
+        const ex = d.expiry_date?.trim() ?? "";
+        if (cn || ex) {
+          setDisabilityCardExtract({ card_number: cn, expiry_date: ex });
+          appliedSomething = true;
+        } else if (!fn && !ln && !validBd && !hasDt) {
+          setDisabilityCardExtract(null);
+        }
+      }
+      showToast(
+        appliedSomething
+          ? "Form auto-filled from your documents."
+          : "Documents received; no fields could be extracted (try clearer scans or check API key).",
+        appliedSomething ? "success" : "info"
+      );
+    } catch {
+      showToast("Could not analyze documents. Is the API running?", "error");
+    } finally {
+      setDocExtractBusy(false);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -580,35 +777,62 @@ export default function Login() {
                 ref={headingRef}
                 className="text-3xl font-black dark:text-gray-100 outline-none mb-2"
               >
-                {step === 1 && t.basicInfo}
-                {step === 2 &&
-                  (role === UserRole.CANDIDATE
-                    ? t.medicalProfile
-                    : t.companyInfra)}
-                {step === 3 &&
-                  (role === UserRole.CANDIDATE
-                    ? t.professionalExp
-                    : t.instCommit)}
+                {role === UserRole.CANDIDATE ? (
+                  <>
+                    {step === 1 && t.accountType}
+                    {step === 2 && t.smartStart}
+                    {step === 3 && t.basicInfo}
+                    {step === 4 && t.medicalProfile}
+                    {step === 5 && t.professionalExp}
+                    {step === 6 && t.almostThere}
+                  </>
+                ) : (
+                  <>
+                    {step === 1 && t.basicInfo}
+                    {step === 2 && t.companyInfra}
+                    {step === 3 && t.instCommit}
+                  </>
+                )}
               </h2>
               <p className="text-gray-500 dark:text-gray-400">
-                {step === 1 &&
-                  (lang === Language.AR
-                    ? "أخبرنا من أنت لتخصيص تجربتك."
-                    : lang === Language.FR
-                      ? "Dites-nous qui vous êtes pour personnaliser votre expérience."
-                      : "Tell us who you are to personalize your experience.")}
-                {step === 2 &&
-                  (role === UserRole.CANDIDATE
-                    ? lang === Language.AR
-                      ? "ساعدنا في فهم احتياجات مكان العمل الخاصة بك."
-                      : "Help us understand your workplace needs."
-                    : lang === Language.AR
-                      ? "أخبرنا عن إمكانية الوصول المادي والرقمي لديك."
-                      : "Tell us about your physical and digital accessibility.")}
-                {step === 3 &&
-                  (lang === Language.AR
-                    ? "أكمل ملفك الشخصي لمطابقة أفضل."
-                    : "Finalize your profile for better matching.")}
+                {role === UserRole.CANDIDATE ? (
+                  <>
+                    {step === 1 && t.accountTypeHint}
+                    {step === 2 && t.smartStartDesc}
+                    {step === 3 &&
+                      (lang === Language.AR
+                        ? "أخبرنا من أنت لتخصيص تجربتك."
+                        : lang === Language.FR
+                          ? "Dites-nous qui vous êtes pour personnaliser votre expérience."
+                          : "Tell us who you are to personalize your experience.")}
+                    {step === 4 &&
+                      (lang === Language.AR
+                        ? "ساعدنا في فهم احتياجات مكان العمل الخاصة بك."
+                        : "Help us understand your workplace needs.")}
+                    {step === 5 &&
+                      (lang === Language.AR
+                        ? "أكمل ملفك الشخصي لمطابقة أفضل."
+                        : "Finalize your profile for better matching.")}
+                    {step === 6 && t.almostThereDesc}
+                  </>
+                ) : (
+                  <>
+                    {step === 1 &&
+                      (lang === Language.AR
+                        ? "أخبرنا من أنت لتخصيص تجربتك."
+                        : lang === Language.FR
+                          ? "Dites-nous qui vous êtes pour personnaliser votre expérience."
+                          : "Tell us who you are to personalize your experience.")}
+                    {step === 2 &&
+                      (lang === Language.AR
+                        ? "أخبرنا عن إمكانية الوصول المادي والرقمي لديك."
+                        : "Tell us about your physical and digital accessibility.")}
+                    {step === 3 &&
+                      (lang === Language.AR
+                        ? "أكمل ملفك الشخصي لمطابقة أفضل."
+                        : "Finalize your profile for better matching.")}
+                  </>
+                )}
               </p>
             </div>
 
@@ -663,119 +887,394 @@ export default function Login() {
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  {role === UserRole.CANDIDATE ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input
-                        label="First Name"
-                        placeholder="e.g., Alex"
-                        autoComplete="given-name"
-                        value={candidateData.first_name}
-                        onChange={(e) => setCandidateData({...candidateData, first_name: e.target.value})}
-                      />
-                      <Input
-                        label="Last Name"
-                        placeholder="e.g., Johnson"
-                        autoComplete="family-name"
-                        value={candidateData.last_name}
-                        onChange={(e) => setCandidateData({...candidateData, last_name: e.target.value})}
-                      />
-                    </div>
-                  ) : (
+                {role === UserRole.COMPANY && (
+                  <div className="space-y-4">
                     <Input
                       label={t.compName}
                       placeholder={t.placeholderComp}
                       autoComplete="organization"
                       value={companyData.company_name}
-                      onChange={(e) => setCompanyData({...companyData, company_name: e.target.value})}
+                      onChange={(e) =>
+                        setCompanyData({ ...companyData, company_name: e.target.value })
+                      }
                     />
-                  )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input
-                      label={t.email}
-                      type="email"
-                      placeholder={t.placeholderEmail}
-                      autoComplete="email"
-                      value={role === UserRole.CANDIDATE ? candidateData.email : companyData.email}
-                      onChange={(e) => role === UserRole.CANDIDATE 
-                        ? setCandidateData({...candidateData, email: e.target.value})
-                        : setCompanyData({...companyData, email: e.target.value})}
-                    />
-                    <Input
-                      label={t.phone}
-                      type="tel"
-                      placeholder={t.placeholderPhone}
-                      autoComplete="tel"
-                      value={role === UserRole.CANDIDATE ? candidateData.phone_number : companyData.phone_number}
-                      onChange={(e) => role === UserRole.CANDIDATE 
-                        ? setCandidateData({...candidateData, phone_number: e.target.value})
-                        : setCompanyData({...companyData, phone_number: e.target.value})}
-                    />
-                  </div>
-
-                  {role === UserRole.CANDIDATE ? (
-                    <>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input
-                          label="Birth Date"
-                          type="date"
-                          value={candidateData.birth_date}
-                          onChange={(e) => setCandidateData({...candidateData, birth_date: e.target.value})}
-                        />
-                        <div className="space-y-1">
-                          <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                            Gender
-                          </label>
-                          <select 
-                            className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white dark:bg-gray-800 dark:text-white"
-                            value={candidateData.gender}
-                            onChange={(e) => setCandidateData({...candidateData, gender: e.target.value})}
-                          >
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                          </select>
-                        </div>
-                      </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Input
-                        label="Address"
-                        placeholder="e.g., 123 Main St, City, Country"
-                        value={candidateData.address}
-                        onChange={(e) => setCandidateData({...candidateData, address: e.target.value})}
+                        label={t.email}
+                        type="email"
+                        placeholder={t.placeholderEmail}
+                        autoComplete="email"
+                        value={companyData.email}
+                        onChange={(e) =>
+                          setCompanyData({ ...companyData, email: e.target.value })
+                        }
                       />
-                    </>
-                  ) : (
+                      <Input
+                        label={t.phone}
+                        type="tel"
+                        placeholder={t.placeholderPhone}
+                        autoComplete="tel"
+                        value={companyData.phone_number}
+                        onChange={(e) =>
+                          setCompanyData({
+                            ...companyData,
+                            phone_number: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Input
                         label="Location"
                         placeholder="e.g., Tunis, Tunisia"
                         value={companyData.location}
-                        onChange={(e) => setCompanyData({...companyData, location: e.target.value})}
+                        onChange={(e) =>
+                          setCompanyData({ ...companyData, location: e.target.value })
+                        }
                       />
                       <Input
                         label="Founded Year"
                         type="number"
                         placeholder="e.g., 2010"
                         value={companyData.founded_year.toString()}
-                        onChange={(e) => setCompanyData({...companyData, founded_year: parseInt(e.target.value) || 0})}
+                        onChange={(e) =>
+                          setCompanyData({
+                            ...companyData,
+                            founded_year: parseInt(e.target.value) || 0,
+                          })
+                        }
                       />
                     </div>
-                  )}
 
-                  <Input
-                    label={t.password}
-                    type="password"
-                    placeholder={t.placeholderPass}
-                    value={role === UserRole.CANDIDATE ? candidateData.password : companyData.password}
-                    onChange={(e) => role === UserRole.CANDIDATE 
-                      ? setCandidateData({...candidateData, password: e.target.value})
-                      : setCompanyData({...companyData, password: e.target.value})}
-                  />
-                </div>
+                    <Input
+                      label={t.password}
+                      type="password"
+                      placeholder={t.placeholderPass}
+                      value={companyData.password}
+                      onChange={(e) =>
+                        setCompanyData({ ...companyData, password: e.target.value })
+                      }
+                    />
+                  </div>
+                )}
               </div>
             )}
 
             {step === 2 && role === UserRole.CANDIDATE && (
+              <div className="space-y-8 text-left">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="block text-sm font-black text-gray-800 dark:text-gray-200">
+                      {t.disabilityCardUpload}
+                    </label>
+                    <input
+                      type="file"
+                      id="disability-card-upload-step2"
+                      className="hidden"
+                      accept="image/*,.pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const next = {
+                            ...candidateFiles,
+                            disability_card: file,
+                          };
+                          setCandidateFiles(next);
+                          setDisabilityCardExtract(null);
+                          void extractDocuments({
+                            disability_card: file,
+                            resume: next.resume ?? undefined,
+                          });
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="disability-card-upload-step2"
+                      className="block min-h-[160px] p-6 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-2xl bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 transition-all focus-within:ring-4 ring-primary/20 flex flex-col items-center justify-center"
+                    >
+                      <Upload className="text-primary mb-2" size={28} />
+                      <span className="font-black text-sm text-primary-dark dark:text-primary-light">
+                        {candidateFiles.disability_card
+                          ? candidateFiles.disability_card.name
+                          : "PNG, JPG, or PDF"}
+                      </span>
+                    </label>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="block text-sm font-black text-gray-800 dark:text-gray-200">
+                      {t.resumeUpload}
+                    </label>
+                    <input
+                      type="file"
+                      id="cv-upload-step2"
+                      className="hidden"
+                      accept=".pdf,application/pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const next = { ...candidateFiles, resume: file };
+                          setCandidateFiles(next);
+                          if (
+                            file.type === "text/plain" ||
+                            file.name.toLowerCase().endsWith(".txt")
+                          ) {
+                            handleFileUpload(e);
+                          } else if (file.name.toLowerCase().endsWith(".pdf")) {
+                            void extractDocuments({
+                              resume: file,
+                              disability_card: next.disability_card ?? undefined,
+                            });
+                          }
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="cv-upload-step2"
+                      className="block min-h-[160px] p-6 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-2xl bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 transition-all focus-within:ring-4 ring-primary/20 flex flex-col items-center justify-center"
+                    >
+                      <Upload className="text-primary mb-2" size={28} />
+                      <span className="font-black text-sm text-primary-dark dark:text-primary-light">
+                        {candidateFiles.resume
+                          ? candidateFiles.resume.name
+                          : "PDF résumé"}
+                      </span>
+                      <span className="text-xs text-gray-500 mt-2 px-2">
+                        {t.resumeDesc}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {docExtractBusy && (
+                  <div className="flex items-center gap-4 p-6 bg-primary/90 text-white rounded-3xl shadow-xl">
+                    <Cpu className="animate-spin shrink-0" size={32} />
+                    <div>
+                      <span className="block font-black text-lg">{t.aiThinking}</span>
+                      <span className="text-xs opacity-90 font-bold">
+                        OCR + Gemini auto-fill…
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {disabilityCardExtract &&
+                  (disabilityCardExtract.card_number ||
+                    disabilityCardExtract.expiry_date) && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {disabilityCardExtract.card_number && (
+                        <span className="block">
+                          Card no.: {disabilityCardExtract.card_number}
+                        </span>
+                      )}
+                      {disabilityCardExtract.expiry_date && (
+                        <span className="block">
+                          Expiry: {disabilityCardExtract.expiry_date}
+                        </span>
+                      )}
+                    </p>
+                  )}
+
+                <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50 p-5 space-y-3">
+                  <p className="text-xs font-black uppercase tracking-wide text-gray-500">
+                    Auto-filled preview
+                  </p>
+                  {(candidateData.first_name || candidateData.last_name) && (
+                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                      <span className="font-bold">Name: </span>
+                      {[candidateData.first_name, candidateData.last_name]
+                        .filter(Boolean)
+                        .join(" ")}
+                    </p>
+                  )}
+                  {candidateData.birth_date && (
+                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                      <span className="font-bold">Birth date: </span>
+                      {candidateData.birth_date}
+                    </p>
+                  )}
+                  {candidateData.email && (
+                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                      <span className="font-bold">{t.email}: </span>
+                      {candidateData.email}
+                    </p>
+                  )}
+                  {(candidateData.phone_number || candidateData.address) && (
+                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                      {candidateData.phone_number && (
+                        <span className="block">
+                          <span className="font-bold">{t.phone}: </span>
+                          {candidateData.phone_number}
+                        </span>
+                      )}
+                      {candidateData.address && (
+                        <span className="block">
+                          <span className="font-bold">Address: </span>
+                          {candidateData.address}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  {candidateData.industry && (
+                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                      <span className="font-bold">Industry: </span>
+                      {candidateData.industry}
+                    </p>
+                  )}
+                  {isValidEducationLevel(candidateData.education_level) &&
+                    candidateData.education_level !== EducationLevel.NO_DEGREE && (
+                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                      <span className="font-bold">Education: </span>
+                      {EDUCATION_LEVEL_LABELS[candidateData.education_level as EducationLevel]}
+                    </p>
+                  )}
+                  {genderFromResumeExtract &&
+                    (candidateData.gender === "male" ||
+                      candidateData.gender === "female") && (
+                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                      <span className="font-bold">Gender: </span>
+                      {candidateData.gender === "male" ? "Male" : "Female"}
+                    </p>
+                  )}
+                  {candidateData.profile_title && (
+                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                      <span className="font-bold">{t.jobTitle}: </span>
+                      {candidateData.profile_title}
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <span className="font-bold">{t.disabilityCat}: </span>
+                    {t.disabilities[
+                      candidateData.disability_type as HandicapType
+                    ] ?? candidateData.disability_type}
+                  </p>
+                  <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <span className="font-bold">{t.yearsExp}: </span>
+                    {candidateData.years_of_experience}
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {candidateData.key_skills.length > 0 ? (
+                      candidateData.key_skills.map((skill, idx) => (
+                        <span
+                          key={idx}
+                          className="px-3 py-1 bg-white dark:bg-gray-900 text-primary text-xs font-bold rounded-xl border border-primary/20"
+                        >
+                          {skill}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">
+                        {t.uploadPrompt}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && role === UserRole.CANDIDATE && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="First Name"
+                    placeholder="e.g., Alex"
+                    autoComplete="given-name"
+                    value={candidateData.first_name}
+                    onChange={(e) =>
+                      setCandidateData({
+                        ...candidateData,
+                        first_name: e.target.value,
+                      })
+                    }
+                  />
+                  <Input
+                    label="Last Name"
+                    placeholder="e.g., Johnson"
+                    autoComplete="family-name"
+                    value={candidateData.last_name}
+                    onChange={(e) =>
+                      setCandidateData({
+                        ...candidateData,
+                        last_name: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label={t.email}
+                    type="email"
+                    placeholder={t.placeholderEmail}
+                    autoComplete="email"
+                    value={candidateData.email}
+                    onChange={(e) =>
+                      setCandidateData({ ...candidateData, email: e.target.value })
+                    }
+                  />
+                  <Input
+                    label={t.phone}
+                    type="tel"
+                    placeholder={t.placeholderPhone}
+                    autoComplete="tel"
+                    value={candidateData.phone_number}
+                    onChange={(e) =>
+                      setCandidateData({
+                        ...candidateData,
+                        phone_number: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Birth Date"
+                    type="date"
+                    value={candidateData.birth_date}
+                    onChange={(e) =>
+                      setCandidateData({
+                        ...candidateData,
+                        birth_date: e.target.value,
+                      })
+                    }
+                  />
+                  <div className="space-y-1">
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                      Gender
+                    </label>
+                    <select
+                      className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white dark:bg-gray-800 dark:text-white"
+                      value={candidateData.gender}
+                      onChange={(e) =>
+                        setCandidateData({ ...candidateData, gender: e.target.value })
+                      }
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                    </select>
+                  </div>
+                </div>
+                <Input
+                  label="Address"
+                  placeholder="e.g., 123 Main St, City, Country"
+                  value={candidateData.address}
+                  onChange={(e) =>
+                    setCandidateData({ ...candidateData, address: e.target.value })
+                  }
+                />
+                <Input
+                  label={t.password}
+                  type="password"
+                  placeholder={t.placeholderPass}
+                  value={candidateData.password}
+                  onChange={(e) =>
+                    setCandidateData({ ...candidateData, password: e.target.value })
+                  }
+                />
+              </div>
+            )}
+
+            {step === 4 && role === UserRole.CANDIDATE && (
               <div className="space-y-6 text-left">
                 <div>
                   <label className="block text-sm font-black text-gray-700 dark:text-gray-300 mb-4">
@@ -859,37 +1358,6 @@ export default function Login() {
                     ))}
                   </div>
                 </div>
-
-                <div className="pt-6 border-t border-gray-100 dark:border-gray-800">
-                  <label className="block text-sm font-black text-gray-700 dark:text-gray-300 mb-4">
-                    Disability Card (Optional)
-                  </label>
-                  <div className="relative group">
-                    <input
-                      type="file"
-                      id="disability-card-upload"
-                      className="hidden"
-                      accept="image/*,.pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setCandidateFiles({...candidateFiles, disability_card: file});
-                        }
-                      }}
-                    />
-                    <label
-                      htmlFor="disability-card-upload"
-                      className="block p-6 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-2xl bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 dark:hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
-                    >
-                      <span className="block font-black text-sm text-primary-dark dark:text-primary-light mb-1">
-                        {candidateFiles.disability_card ? candidateFiles.disability_card.name : "Upload Disability Card"}
-                      </span>
-                      <span className="text-xs text-primary/70 dark:text-primary-light/70">
-                        PNG, JPG, PDF up to 5MB
-                      </span>
-                    </label>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -920,7 +1388,7 @@ export default function Login() {
               </div>
             )}
 
-            {step === 3 && role === UserRole.CANDIDATE && (
+            {step === 5 && role === UserRole.CANDIDATE && (
               <div className="space-y-8 text-left">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
@@ -1011,7 +1479,7 @@ export default function Login() {
               </div>
             )}
 
-            {step === 4 && role === UserRole.CANDIDATE && (
+            {step === 6 && role === UserRole.CANDIDATE && (
               <div className="space-y-8 text-left">
                 <div>
                   <label className="block text-sm font-black text-gray-700 dark:text-gray-300 mb-2">
@@ -1021,111 +1489,86 @@ export default function Login() {
                     className="w-full px-5 py-4 border-2 border-gray-200 dark:border-gray-700 rounded-3xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white dark:bg-gray-800 dark:text-white min-h-[120px]"
                     placeholder="Describe any specific accommodations you need..."
                     value={candidateData.accessibility_needs}
-                    onChange={(e) => setCandidateData({...candidateData, accessibility_needs: e.target.value})}
+                    onChange={(e) =>
+                      setCandidateData({
+                        ...candidateData,
+                        accessibility_needs: e.target.value,
+                      })
+                    }
                   ></textarea>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="relative group">
-                    <input
-                      type="file"
-                      id="profile-pic-upload"
-                      className="hidden"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setCandidateFiles({...candidateFiles, logo: file});
-                        }
-                      }}
-                    />
-                    <label
-                      htmlFor="profile-pic-upload"
-                      className="block p-8 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-[2rem] bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 dark:hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
-                    >
-                      <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-3xl shadow-lg flex items-center justify-center mx-auto mb-4 text-primary group-hover:rotate-6 transition-transform">
-                        <Upload size={32} />
-                      </div>
-                      <span className="block font-black text-lg text-primary-dark dark:text-primary-light mb-1">
-                        {candidateFiles.logo ? candidateFiles.logo.name : "Profile Picture"}
-                      </span>
-                      <span className="text-xs text-primary/70 dark:text-primary-light/70">
-                        PNG, JPG up to 5MB
-                      </span>
-                    </label>
-                  </div>
-
-                  <div className="relative group">
-                    <input
-                      type="file"
-                      id="cv-upload"
-                      className="hidden"
-                      accept=".pdf,application/pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setCandidateFiles({ ...candidateFiles, resume: file });
-                          // PDF: backend stores file; Gemini skill extraction uses plain text only
-                          if (file.type === "text/plain" || file.name.toLowerCase().endsWith(".txt")) {
-                            handleFileUpload(e);
-                          }
-                        }
-                      }}
-                    />
-                    <label
-                      htmlFor="cv-upload"
-                      className="block p-8 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-[2rem] bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 dark:hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
-                    >
-                      <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-3xl shadow-lg flex items-center justify-center mx-auto mb-4 text-primary group-hover:rotate-6 transition-transform">
-                        <Upload size={32} />
-                      </div>
-                      <span className="block font-black text-lg text-primary-dark dark:text-primary-light mb-1">
-                        {candidateFiles.resume ? candidateFiles.resume.name : t.resumeUpload}
-                      </span>
-                      <span className="text-xs text-primary/70 dark:text-primary-light/70">
-                        {t.resumeDesc}
-                      </span>
-                    </label>
-                  </div>
+                <div className="relative group max-w-md">
+                  <input
+                    type="file"
+                    id="profile-pic-upload"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setCandidateFiles({ ...candidateFiles, logo: file });
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor="profile-pic-upload"
+                    className="block p-8 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-[2rem] bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 dark:hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
+                  >
+                    <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-3xl shadow-lg flex items-center justify-center mx-auto mb-4 text-primary group-hover:rotate-6 transition-transform">
+                      <Upload size={32} />
+                    </div>
+                    <span className="block font-black text-lg text-primary-dark dark:text-primary-light mb-1">
+                      {candidateFiles.logo
+                        ? candidateFiles.logo.name
+                        : "Profile Picture"}
+                    </span>
+                    <span className="text-xs text-primary/70 dark:text-primary-light/70">
+                      PNG, JPG up to 5MB
+                    </span>
+                  </label>
                 </div>
 
+                {(candidateFiles.resume || candidateFiles.disability_card) && (
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/40 px-4 py-3 text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                    <p className="font-bold text-gray-700 dark:text-gray-300">
+                      Documents for your account
+                    </p>
+                    {candidateFiles.disability_card && (
+                      <p>Disability card: {candidateFiles.disability_card.name}</p>
+                    )}
+                    {candidateFiles.resume && (
+                      <p>Résumé: {candidateFiles.resume.name}</p>
+                    )}
+                    <p className="text-gray-500 pt-1">
+                      Go back to step 2 if you need to replace a file.
+                    </p>
+                  </div>
+                )}
+
                 <div aria-live="polite" className="min-h-[80px]">
-                  {isLoading ? (
-                    <div className="flex items-center gap-4 p-6 bg-primary text-white rounded-3xl shadow-xl">
-                      <Cpu className="animate-spin" size={32} />
-                      <div>
-                        <span className="block font-black text-lg">
-                          {t.aiThinking}
-                        </span>
-                        <span className="text-xs opacity-80 uppercase tracking-widest font-bold">
-                          {t.aiMapping}
-                        </span>
-                      </div>
+                  <div className="space-y-4">
+                    <label className="block text-sm font-black text-gray-700 dark:text-gray-300">
+                      {t.extractedSkills}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {candidateData.key_skills.length > 0 ? (
+                        candidateData.key_skills.map((skill, idx) => (
+                          <span
+                            key={idx}
+                            className="px-4 py-2 bg-white dark:bg-gray-800 text-primary dark:text-primary-light rounded-2xl text-xs font-black border-2 border-primary/20 dark:border-primary/30 flex items-center gap-2 shadow-sm"
+                          >
+                            {skill}{" "}
+                            <Check size={14} className="text-success-green" />
+                          </span>
+                        ))
+                      ) : (
+                        <p className="text-gray-400 italic text-sm py-4">
+                          {t.uploadPrompt}
+                        </p>
+                      )}
                     </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <label className="block text-sm font-black text-gray-700 dark:text-gray-300">
-                        {t.extractedSkills}
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        {candidateData.key_skills.length > 0 ? (
-                          candidateData.key_skills.map((skill, idx) => (
-                            <span
-                              key={idx}
-                              className="px-4 py-2 bg-white dark:bg-gray-800 text-primary dark:text-primary-light rounded-2xl text-xs font-black border-2 border-primary/20 dark:border-primary/30 flex items-center gap-2 shadow-sm animate-in zoom-in-50 duration-300"
-                            >
-                              {skill}{" "}
-                              <Check size={14} className="text-success-green" />
-                            </span>
-                          ))
-                        ) : (
-                          <p className="text-gray-400 italic text-sm py-4">
-                            {t.uploadPrompt}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
             )}

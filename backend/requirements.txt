@@ -8,3 +8,13 @@ python-dotenv
 bcrypt
 email-validator
 PyJWT
+langchain-google-genai
+langchain-community
+langchain
+faiss-cpu
+google-generativeai
+pymongo[srv]
+pdfplumber
+pytesseract
+pdf2image
+Pillow
