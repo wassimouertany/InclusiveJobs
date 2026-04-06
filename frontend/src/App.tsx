@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
 import Stats from "./components/Stats";
@@ -11,7 +11,11 @@ import Login from "./components/Login";
 import FindJobs from "./components/FindJobs";
 import ForEmployers from "./components/ForEmployers";
 import Dashboard from "./components/Dashboard";
-import CandidateDashboard from "./components/CandidateDashboard";
+import CandidateLayout from "./pages/candidate/CandidateLayout";
+import CandidateHome from "./pages/candidate/CandidateHome";
+import CandidateProfile from "./pages/candidate/CandidateProfile";
+import CandidateFindJobs from "./pages/candidate/CandidateFindJobs";
+import CandidateApplications from "./pages/candidate/CandidateApplications";
 import AccessibilityWidget from "./components/AccessibilityWidget";
 import RecruiterDashboard from "./components/RecruiterDashboard";
 
@@ -50,7 +54,16 @@ export default function App() {
         <Route path="/employers" element={<ForEmployers />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/dashboard/recruiter" element={<RecruiterDashboard />} />
-        <Route path="/dashboard/candidate" element={<CandidateDashboard />} />
+        <Route path="/dashboard/candidate" element={<CandidateLayout />}>
+          <Route
+            index
+            element={<Navigate to="/dashboard/candidate/home" replace />}
+          />
+          <Route path="home" element={<CandidateHome />} />
+          <Route path="profile" element={<CandidateProfile />} />
+          <Route path="find-jobs" element={<CandidateFindJobs />} />
+          <Route path="applications" element={<CandidateApplications />} />
+        </Route>
       </Routes>
     </AppShell>
   );

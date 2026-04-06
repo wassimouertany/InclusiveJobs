@@ -22,12 +22,8 @@ import {
   Cpu,
   Building2,
 } from "lucide-react";
-import { API_BASE_URL } from "../config/api";
-import {
-  AUTH_ROLE_KEY,
-  AUTH_TOKEN_KEY,
-  AUTH_USER_ID_KEY,
-} from "../config/auth";
+import { useAuthStore } from "../config/auth";
+import { apiClient } from "../services/apiClient";
 import { extractSkillsFromCV } from "../services/geminiService";
 import { useNavigation } from "../context/NavigationContext";
 import { useToast } from "../context/ToastContext";
@@ -65,17 +61,22 @@ function appendCandidateFormData(
   }
 }
 
-async function readErrorDetail(response: Response): Promise<string> {
-  try {
-    const body = await response.json();
-    if (typeof body?.detail === "string") return body.detail;
-    if (Array.isArray(body?.detail)) {
-      return body.detail.map((e: { msg?: string }) => e.msg).filter(Boolean).join(", ") || "Request failed";
+function readErrorDetailFromResponseLike(
+  data: unknown,
+  statusText: string
+): string {
+  if (data !== null && typeof data === "object" && !Array.isArray(data)) {
+    const body = data as { detail?: unknown };
+    if (typeof body.detail === "string") return body.detail;
+    if (Array.isArray(body.detail)) {
+      return (
+        body.detail.map((e: { msg?: string }) => e.msg).filter(Boolean).join(", ") ||
+        "Request failed"
+      );
     }
     return "Request failed";
-  } catch {
-    return response.statusText || "Request failed";
   }
+  return statusText || "Request failed";
 }
 
 type ExtractDocumentsResponse = {
@@ -423,15 +424,19 @@ export default function Login() {
       if (files.resume) formData.append("resume", files.resume);
       if (files.disability_card)
         formData.append("disability_card", files.disability_card);
-      const res = await fetch(
-        `${API_BASE_URL}/users/candidates/extract-documents`,
-        { method: "POST", body: formData }
+      const response = await apiClient.post<ExtractDocumentsResponse>(
+        "/users/candidates/extract-documents",
+        formData,
+        { validateStatus: () => true }
       );
-      if (!res.ok) {
-        showToast(await readErrorDetail(res), "error");
+      if (response.status < 200 || response.status >= 300) {
+        showToast(
+          readErrorDetailFromResponseLike(response.data, response.statusText),
+          "error"
+        );
         return;
       }
-      const data = (await res.json()) as ExtractDocumentsResponse;
+      const data = response.data;
       let appliedSomething = false;
       if (data.resume) {
         const r = data.resume;
@@ -556,23 +561,29 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/users/login/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
-      });
-      if (!response.ok) {
-        const detail = await readErrorDetail(response);
-        showToast(detail, "error");
+      const response = await apiClient.post(
+        "/users/login/",
+        { email: loginEmail, password: loginPassword },
+        { validateStatus: () => true }
+      );
+      if (response.status < 200 || response.status >= 300) {
+        showToast(
+          readErrorDetailFromResponseLike(response.data, response.statusText),
+          "error"
+        );
         return;
       }
-      const data = await response.json();
-      localStorage.setItem(AUTH_TOKEN_KEY, data.access_token);
-      localStorage.setItem(AUTH_ROLE_KEY, data.role);
-      localStorage.setItem(AUTH_USER_ID_KEY, data.id);
+      const data = response.data as {
+        access_token: string;
+        role: string;
+        id: string | number;
+      };
+      useAuthStore
+        .getState()
+        .setAuth(data.access_token, data.role, String(data.id));
       showToast("Successfully logged in! Welcome back.", "success");
       if (data.role === UserRole.CANDIDATE) {
-        navigate("dashboard-candidate");
+        navigate("dashboard-candidate-home");
       } else {
         navigate("dashboard-recruiter");
       }
@@ -589,8 +600,8 @@ export default function Login() {
     try {
       const endpoint =
         role === UserRole.CANDIDATE
-          ? `${API_BASE_URL}/users/candidates/`
-          : `${API_BASE_URL}/users/recruiters/`;
+          ? "/users/candidates/"
+          : "/users/recruiters/";
 
       const formData = new FormData();
 
@@ -617,14 +628,15 @@ export default function Login() {
         if (companyFiles.logo) formData.append("logo", companyFiles.logo);
       }
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        body: formData,
+      const response = await apiClient.post(endpoint, formData, {
+        validateStatus: () => true,
       });
 
-      if (!response.ok) {
-        const detail = await readErrorDetail(response);
-        showToast(detail, "error");
+      if (response.status < 200 || response.status >= 300) {
+        showToast(
+          readErrorDetailFromResponseLike(response.data, response.statusText),
+          "error"
+        );
         return;
       }
 
@@ -640,11 +652,14 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[80vh] flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8" dir={isRtl ? "rtl" : "ltr"}>
+    <div
+      className="min-h-[80vh] flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-bg-page"
+      dir={isRtl ? "rtl" : "ltr"}
+    >
       
       {/* Language & View Toggle Controls */}
       <div className="w-full max-w-xl flex justify-between items-center mb-8">
-        <div className="flex bg-white dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="flex bg-white p-1 rounded-xl border border-border shadow-sm">
           {[
             { code: Language.EN, label: "EN" },
             { code: Language.FR, label: "FR" },
@@ -656,7 +671,7 @@ export default function Login() {
               className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
                 lang === l.code 
                   ? "bg-primary shadow-sm text-white" 
-                  : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
+                  : "text-gray-500 hover:text-gray-900"
               }`}
             >
               {l.label}
@@ -678,15 +693,15 @@ export default function Login() {
 
       <div className="w-full max-w-xl">
         {view === "LOGIN" && (
-          <div className="bg-white dark:bg-gray-900 p-8 sm:p-10 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-gray-800 animate-in fade-in slide-in-from-bottom-6">
+          <div className="bg-white text-gray-900 p-8 sm:p-10 rounded-[2.5rem] shadow-lg border border-border animate-in fade-in slide-in-from-bottom-6">
             <h1
               tabIndex={-1}
               ref={headingRef}
-              className="text-4xl font-black mb-2 dark:text-gray-100 outline-none text-left"
+              className="text-4xl font-black mb-2 text-gray-900 outline-none text-left"
             >
               {t.welcome}
             </h1>
-            <p className="text-gray-500 dark:text-gray-400 mb-10 text-left">
+            <p className="text-gray-500 mb-10 text-left">
               {t.accessDashboard}
             </p>
 
@@ -721,9 +736,9 @@ export default function Login() {
                 </button>
               </div>
 
-              <div className="p-5 bg-primary/5 dark:bg-primary/10 rounded-[1.5rem] border border-primary/20 dark:border-primary/30 flex items-center justify-between">
+              <div className="p-5 bg-primary/10 rounded-[1.5rem] border border-primary/30 flex items-center justify-between">
                 <div className="text-left">
-                  <h3 className="text-sm font-black dark:text-gray-100 mb-1">
+                  <h3 className="text-sm font-black text-gray-900 mb-1">
                     {t.verification}
                   </h3>
                   <button
@@ -736,23 +751,27 @@ export default function Login() {
                 </div>
                 <input
                   type="text"
-                  className="w-24 px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl dark:bg-gray-800 dark:text-white font-mono text-center focus:border-primary outline-none"
+                  className="w-24 px-4 py-3 border-2 border-gray-200 rounded-xl bg-white text-gray-900 font-mono text-center focus:border-primary outline-none"
                   placeholder="0000"
                   aria-label="Enter verification code"
                   required
                 />
               </div>
 
-              <Button type="submit" className="w-full py-4 text-lg" disabled={isLoading}>
+              <Button
+                type="submit"
+                className="w-full py-4 text-lg bg-primary text-white hover:bg-primary-dark"
+                disabled={isLoading}
+              >
                 <LogIn size={22} /> {isLoading ? "…" : t.signIn}
               </Button>
 
               <div className="relative py-2 flex items-center">
-                <div className="flex-grow border-t border-gray-200 dark:border-gray-800"></div>
-                <span className="flex-shrink mx-4 text-gray-400 text-sm font-bold uppercase tracking-widest">
+                <div className="flex-grow border-t border-gray-200"></div>
+                <span className="flex-shrink mx-4 text-gray-500 text-sm font-bold uppercase tracking-widest">
                   {t.or}
                 </span>
-                <div className="flex-grow border-t border-gray-200 dark:border-gray-800"></div>
+                <div className="flex-grow border-t border-gray-200"></div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -768,14 +787,14 @@ export default function Login() {
         )}
 
         {view === "REGISTER" && (
-          <div className="bg-white dark:bg-gray-900 p-8 sm:p-10 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-gray-800 transition-all duration-500 animate-in fade-in slide-in-from-right-6">
+          <div className="bg-white text-gray-900 p-8 sm:p-10 rounded-[2.5rem] shadow-lg border border-border transition-all duration-500 animate-in fade-in slide-in-from-right-6">
             <ProgressBar current={step} total={totalSteps} />
 
             <div className="mb-10 text-left">
               <h2
                 tabIndex={-1}
                 ref={headingRef}
-                className="text-3xl font-black dark:text-gray-100 outline-none mb-2"
+                className="text-3xl font-black text-gray-900 outline-none mb-2"
               >
                 {role === UserRole.CANDIDATE ? (
                   <>
@@ -794,7 +813,7 @@ export default function Login() {
                   </>
                 )}
               </h2>
-              <p className="text-gray-500 dark:text-gray-400">
+              <p className="text-gray-500">
                 {role === UserRole.CANDIDATE ? (
                   <>
                     {step === 1 && t.accountTypeHint}
@@ -849,8 +868,8 @@ export default function Login() {
                     role="radio"
                     className={`p-5 rounded-3xl border-2 transition-all text-center flex flex-col items-center justify-center ${
                       role === UserRole.CANDIDATE 
-                        ? "border-primary bg-primary/5 dark:bg-primary/10 ring-4 ring-primary/20 dark:ring-primary/30" 
-                        : "border-gray-100 dark:border-gray-800 hover:border-gray-200"
+                        ? "border-primary bg-primary/5 ring-4 ring-primary/20" 
+                        : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
                     <div
@@ -860,7 +879,7 @@ export default function Login() {
                     >
                       <UserPlus size={28} />
                     </div>
-                    <span className="font-black text-sm dark:text-gray-100">
+                    <span className="font-black text-sm">
                       {t.candidate}
                     </span>
                   </button>
@@ -870,8 +889,8 @@ export default function Login() {
                     role="radio"
                     className={`p-5 rounded-3xl border-2 transition-all text-center flex flex-col items-center justify-center ${
                       role === UserRole.COMPANY 
-                        ? "border-primary bg-primary/5 dark:bg-primary/10 ring-4 ring-primary/20 dark:ring-primary/30" 
-                        : "border-gray-100 dark:border-gray-800 hover:border-gray-200"
+                        ? "border-primary bg-primary/5 ring-4 ring-primary/20" 
+                        : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
                     <div
@@ -881,7 +900,7 @@ export default function Login() {
                     >
                       <Building2 size={28} />
                     </div>
-                    <span className="font-black text-sm dark:text-gray-100">
+                    <span className="font-black text-sm">
                       {t.company}
                     </span>
                   </button>
@@ -966,7 +985,7 @@ export default function Login() {
               <div className="space-y-8 text-left">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-3">
-                    <label className="block text-sm font-black text-gray-800 dark:text-gray-200">
+                    <label className="block text-sm font-black text-gray-800">
                       {t.disabilityCardUpload}
                     </label>
                     <input
@@ -992,10 +1011,10 @@ export default function Login() {
                     />
                     <label
                       htmlFor="disability-card-upload-step2"
-                      className="block min-h-[160px] p-6 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-2xl bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 transition-all focus-within:ring-4 ring-primary/20 flex flex-col items-center justify-center"
+                      className="block min-h-[160px] p-6 border-2 border-dashed border-primary/30 rounded-2xl bg-primary/5 text-center cursor-pointer hover:bg-primary/10 transition-all focus-within:ring-4 ring-primary/20 flex flex-col items-center justify-center"
                     >
                       <Upload className="text-primary mb-2" size={28} />
-                      <span className="font-black text-sm text-primary-dark dark:text-primary-light">
+                      <span className="font-black text-sm text-primary-dark">
                         {candidateFiles.disability_card
                           ? candidateFiles.disability_card.name
                           : "PNG, JPG, or PDF"}
@@ -1003,7 +1022,7 @@ export default function Login() {
                     </label>
                   </div>
                   <div className="space-y-3">
-                    <label className="block text-sm font-black text-gray-800 dark:text-gray-200">
+                    <label className="block text-sm font-black text-gray-800">
                       {t.resumeUpload}
                     </label>
                     <input
@@ -1032,10 +1051,10 @@ export default function Login() {
                     />
                     <label
                       htmlFor="cv-upload-step2"
-                      className="block min-h-[160px] p-6 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-2xl bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 transition-all focus-within:ring-4 ring-primary/20 flex flex-col items-center justify-center"
+                      className="block min-h-[160px] p-6 border-2 border-dashed border-primary/30 rounded-2xl bg-primary/5 text-center cursor-pointer hover:bg-primary/10 transition-all focus-within:ring-4 ring-primary/20 flex flex-col items-center justify-center"
                     >
                       <Upload className="text-primary mb-2" size={28} />
-                      <span className="font-black text-sm text-primary-dark dark:text-primary-light">
+                      <span className="font-black text-sm text-primary-dark">
                         {candidateFiles.resume
                           ? candidateFiles.resume.name
                           : "PDF résumé"}
@@ -1062,7 +1081,7 @@ export default function Login() {
                 {disabilityCardExtract &&
                   (disabilityCardExtract.card_number ||
                     disabilityCardExtract.expiry_date) && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <p className="text-xs text-gray-500">
                       {disabilityCardExtract.card_number && (
                         <span className="block">
                           Card no.: {disabilityCardExtract.card_number}
@@ -1076,12 +1095,12 @@ export default function Login() {
                     </p>
                   )}
 
-                <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50 p-5 space-y-3">
+                <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-5 space-y-3">
                   <p className="text-xs font-black uppercase tracking-wide text-gray-500">
                     Auto-filled preview
                   </p>
                   {(candidateData.first_name || candidateData.last_name) && (
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <p className="text-sm text-gray-800">
                       <span className="font-bold">Name: </span>
                       {[candidateData.first_name, candidateData.last_name]
                         .filter(Boolean)
@@ -1089,19 +1108,19 @@ export default function Login() {
                     </p>
                   )}
                   {candidateData.birth_date && (
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <p className="text-sm text-gray-800">
                       <span className="font-bold">Birth date: </span>
                       {candidateData.birth_date}
                     </p>
                   )}
                   {candidateData.email && (
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <p className="text-sm text-gray-800">
                       <span className="font-bold">{t.email}: </span>
                       {candidateData.email}
                     </p>
                   )}
                   {(candidateData.phone_number || candidateData.address) && (
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <p className="text-sm text-gray-800">
                       {candidateData.phone_number && (
                         <span className="block">
                           <span className="font-bold">{t.phone}: </span>
@@ -1117,14 +1136,14 @@ export default function Login() {
                     </p>
                   )}
                   {candidateData.industry && (
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <p className="text-sm text-gray-800">
                       <span className="font-bold">Industry: </span>
                       {candidateData.industry}
                     </p>
                   )}
                   {isValidEducationLevel(candidateData.education_level) &&
                     candidateData.education_level !== EducationLevel.NO_DEGREE && (
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <p className="text-sm text-gray-800">
                       <span className="font-bold">Education: </span>
                       {EDUCATION_LEVEL_LABELS[candidateData.education_level as EducationLevel]}
                     </p>
@@ -1132,24 +1151,24 @@ export default function Login() {
                   {genderFromResumeExtract &&
                     (candidateData.gender === "male" ||
                       candidateData.gender === "female") && (
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <p className="text-sm text-gray-800">
                       <span className="font-bold">Gender: </span>
                       {candidateData.gender === "male" ? "Male" : "Female"}
                     </p>
                   )}
                   {candidateData.profile_title && (
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                    <p className="text-sm text-gray-800">
                       <span className="font-bold">{t.jobTitle}: </span>
                       {candidateData.profile_title}
                     </p>
                   )}
-                  <p className="text-sm text-gray-800 dark:text-gray-200">
+                  <p className="text-sm text-gray-800">
                     <span className="font-bold">{t.disabilityCat}: </span>
                     {t.disabilities[
                       candidateData.disability_type as HandicapType
                     ] ?? candidateData.disability_type}
                   </p>
-                  <p className="text-sm text-gray-800 dark:text-gray-200">
+                  <p className="text-sm text-gray-800">
                     <span className="font-bold">{t.yearsExp}: </span>
                     {candidateData.years_of_experience}
                   </p>
@@ -1158,7 +1177,7 @@ export default function Login() {
                       candidateData.key_skills.map((skill, idx) => (
                         <span
                           key={idx}
-                          className="px-3 py-1 bg-white dark:bg-gray-900 text-primary text-xs font-bold rounded-xl border border-primary/20"
+                          className="px-3 py-1 bg-white text-primary text-xs font-bold rounded-xl border border-primary/20"
                         >
                           {skill}
                         </span>
@@ -1239,11 +1258,11 @@ export default function Login() {
                     }
                   />
                   <div className="space-y-1">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-bold text-gray-700">
                       Gender
                     </label>
                     <select
-                      className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white dark:bg-gray-800 dark:text-white"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white"
                       value={candidateData.gender}
                       onChange={(e) =>
                         setCandidateData({ ...candidateData, gender: e.target.value })
@@ -1277,7 +1296,7 @@ export default function Login() {
             {step === 4 && role === UserRole.CANDIDATE && (
               <div className="space-y-6 text-left">
                 <div>
-                  <label className="block text-sm font-black text-gray-700 dark:text-gray-300 mb-4">
+                  <label className="block text-sm font-black text-gray-700 mb-4">
                     {t.disabilityCat}
                   </label>
                   <div
@@ -1293,12 +1312,12 @@ export default function Login() {
                         className={`px-4 py-4 rounded-2xl border-2 text-sm font-bold transition-all flex items-center gap-3 ${
                           candidateData.disability_type === type 
                             ? "bg-primary text-white border-primary shadow-md scale-[1.02]" 
-                            : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-primary/30"
+                            : "border-gray-200 text-gray-600 hover:border-primary/30"
                         }`}
                       >
                         <div
                           className={`w-3 h-3 rounded-full ${
-                            candidateData.disability_type === type ? "bg-white" : "bg-gray-300 dark:bg-gray-600"
+                            candidateData.disability_type === type ? "bg-white" : "bg-gray-300"
                           }`}
                         ></div>
                         {t.disabilities[type]}
@@ -1307,8 +1326,8 @@ export default function Login() {
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-gray-100 dark:border-gray-800">
-                  <label className="block text-sm font-black text-gray-700 dark:text-gray-300 mb-4">
+                <div className="pt-6 border-t border-gray-100">
+                  <label className="block text-sm font-black text-gray-700 mb-4">
                     {t.accommodations}
                   </label>
                   <div className="grid grid-cols-1 gap-3">
@@ -1332,7 +1351,7 @@ export default function Login() {
                     ].map((item) => (
                       <label
                         key={item.label}
-                        className="flex items-start gap-4 p-4 bg-gray-50/50 dark:bg-gray-800/50 rounded-2xl cursor-pointer border-2 border-transparent hover:border-primary/20 dark:hover:border-primary/30 transition-all"
+                        className="flex items-start gap-4 p-4 bg-gray-50/50 rounded-2xl cursor-pointer border-2 border-transparent hover:border-primary/20 transition-all"
                       >
                         <input
                           type="checkbox"
@@ -1347,10 +1366,10 @@ export default function Login() {
                           }}
                         />
                         <div>
-                          <span className="block font-black text-gray-900 dark:text-gray-100 leading-none mb-1">
+                          <span className="block font-black text-gray-900 leading-none mb-1">
                             {item.label}
                           </span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                          <span className="text-xs text-gray-500">
                             {item.desc}
                           </span>
                         </div>
@@ -1416,11 +1435,11 @@ export default function Login() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-bold text-gray-700">
                       Education Level
                     </label>
                     <select 
-                      className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white dark:bg-gray-800 dark:text-white"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white"
                       value={candidateData.education_level}
                       onChange={(e) => setCandidateData({...candidateData, education_level: e.target.value})}
                     >
@@ -1438,11 +1457,11 @@ export default function Login() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-bold text-gray-700">
                       Work Preference
                     </label>
                     <select 
-                      className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white dark:bg-gray-800 dark:text-white"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white"
                       value={candidateData.work_preference}
                       onChange={(e) => setCandidateData({...candidateData, work_preference: e.target.value})}
                     >
@@ -1454,11 +1473,11 @@ export default function Login() {
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-bold text-gray-700">
                       Availability Status
                     </label>
                     <select 
-                      className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white dark:bg-gray-800 dark:text-white"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white"
                       value={candidateData.availability_status}
                       onChange={(e) => setCandidateData({...candidateData, availability_status: e.target.value})}
                     >
@@ -1482,11 +1501,11 @@ export default function Login() {
             {step === 6 && role === UserRole.CANDIDATE && (
               <div className="space-y-8 text-left">
                 <div>
-                  <label className="block text-sm font-black text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-black text-gray-700 mb-2">
                     Accessibility Needs
                   </label>
                   <textarea
-                    className="w-full px-5 py-4 border-2 border-gray-200 dark:border-gray-700 rounded-3xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white dark:bg-gray-800 dark:text-white min-h-[120px]"
+                    className="w-full px-5 py-4 border-2 border-gray-200 rounded-3xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white min-h-[120px]"
                     placeholder="Describe any specific accommodations you need..."
                     value={candidateData.accessibility_needs}
                     onChange={(e) =>
@@ -1513,25 +1532,25 @@ export default function Login() {
                   />
                   <label
                     htmlFor="profile-pic-upload"
-                    className="block p-8 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-[2rem] bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 dark:hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
+                    className="block p-8 border-2 border-dashed border-primary/30 rounded-[2rem] bg-primary/5 text-center cursor-pointer hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
                   >
-                    <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-3xl shadow-lg flex items-center justify-center mx-auto mb-4 text-primary group-hover:rotate-6 transition-transform">
+                    <div className="w-16 h-16 bg-white rounded-3xl shadow-lg flex items-center justify-center mx-auto mb-4 text-primary group-hover:rotate-6 transition-transform">
                       <Upload size={32} />
                     </div>
-                    <span className="block font-black text-lg text-primary-dark dark:text-primary-light mb-1">
+                    <span className="block font-black text-lg text-primary-dark mb-1">
                       {candidateFiles.logo
                         ? candidateFiles.logo.name
                         : "Profile Picture"}
                     </span>
-                    <span className="text-xs text-primary/70 dark:text-primary-light/70">
+                    <span className="text-xs text-primary/70">
                       PNG, JPG up to 5MB
                     </span>
                   </label>
                 </div>
 
                 {(candidateFiles.resume || candidateFiles.disability_card) && (
-                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/40 px-4 py-3 text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                    <p className="font-bold text-gray-700 dark:text-gray-300">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-xs text-gray-600 space-y-1">
+                    <p className="font-bold text-gray-700">
                       Documents for your account
                     </p>
                     {candidateFiles.disability_card && (
@@ -1548,7 +1567,7 @@ export default function Login() {
 
                 <div aria-live="polite" className="min-h-[80px]">
                   <div className="space-y-4">
-                    <label className="block text-sm font-black text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-black text-gray-700">
                       {t.extractedSkills}
                     </label>
                     <div className="flex flex-wrap gap-2">
@@ -1556,7 +1575,7 @@ export default function Login() {
                         candidateData.key_skills.map((skill, idx) => (
                           <span
                             key={idx}
-                            className="px-4 py-2 bg-white dark:bg-gray-800 text-primary dark:text-primary-light rounded-2xl text-xs font-black border-2 border-primary/20 dark:border-primary/30 flex items-center gap-2 shadow-sm"
+                            className="px-4 py-2 bg-white text-primary rounded-2xl text-xs font-black border-2 border-primary/20 flex items-center gap-2 shadow-sm"
                           >
                             {skill}{" "}
                             <Check size={14} className="text-success-green" />
@@ -1584,11 +1603,11 @@ export default function Login() {
                 />
                 
                 <div className="space-y-2">
-                  <label className="block text-sm font-black text-gray-700 dark:text-gray-300">
+                  <label className="block text-sm font-black text-gray-700">
                     Tell us more about your inclusion strategy
                   </label>
                   <textarea
-                    className="w-full px-5 py-4 border-2 border-gray-200 dark:border-gray-700 rounded-3xl outline-none bg-white dark:bg-gray-800 dark:text-white min-h-[100px] focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all"
+                    className="w-full px-5 py-4 border-2 border-gray-200 rounded-3xl outline-none bg-white min-h-[100px] focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all"
                     placeholder="We value diversity because..."
                     value={companyData.inclusion_strategy}
                     onChange={(e) => setCompanyData({...companyData, inclusion_strategy: e.target.value})}
@@ -1610,15 +1629,15 @@ export default function Login() {
                   />
                   <label
                     htmlFor="logo-upload"
-                    className="block p-8 border-2 border-dashed border-primary/30 dark:border-primary/40 rounded-[2rem] bg-primary/5 dark:bg-primary/5 text-center cursor-pointer hover:bg-primary/10 dark:hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
+                    className="block p-8 border-2 border-dashed border-primary/30 rounded-[2rem] bg-primary/5 text-center cursor-pointer hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
                   >
-                    <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-3xl shadow-lg flex items-center justify-center mx-auto mb-4 text-primary group-hover:rotate-6 transition-transform">
+                    <div className="w-16 h-16 bg-white rounded-3xl shadow-lg flex items-center justify-center mx-auto mb-4 text-primary group-hover:rotate-6 transition-transform">
                       <Upload size={32} />
                     </div>
-                    <span className="block font-black text-lg text-primary-dark dark:text-primary-light mb-1">
+                    <span className="block font-black text-lg text-primary-dark mb-1">
                       {companyFiles.logo ? companyFiles.logo.name : "Upload Company Logo"}
                     </span>
-                    <span className="text-xs text-primary/70 dark:text-primary-light/70">
+                    <span className="text-xs text-primary/70">
                       PNG, JPG up to 5MB
                     </span>
                   </label>
@@ -1626,9 +1645,7 @@ export default function Login() {
               </div>
             )}
 
-            <div
-              className={`flex items-center justify-between mt-12 pt-10 border-t border-gray-100 dark:border-gray-800`}
-            >
+            <div className="flex items-center justify-between mt-12 pt-10 border-t border-gray-200">
               {step > 1 ? (
                 <Button
                   variant="outline"

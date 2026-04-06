@@ -1,35 +1,40 @@
 import { useState } from "react";
 import { User, Menu, X, Heart } from "lucide-react";
 import { useNavigation } from "../context/NavigationContext";
-import {
-  AUTH_ROLE_KEY,
-  AUTH_TOKEN_KEY,
-  AUTH_USER_ID_KEY,
-} from "../config/auth";
-import { Page } from "../types";
+import { useAuthStore } from "../config/auth";
+import { Page, UserRole } from "../types";
 
 export default function Navbar() {
   const { currentPage, navigate } = useNavigation();
+  const role = useAuthStore((s) => s.role);
   const [lang, setLang] = useState<"EN" | "FR" | "AR">("EN");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const isCandidateLoggedIn = role === UserRole.CANDIDATE;
 
   const isDashboard =
     currentPage === "dashboard" ||
     currentPage === "dashboard-recruiter" ||
-    currentPage === "dashboard-candidate";
+    currentPage.startsWith("dashboard-candidate-");
 
   const handleLogout = () => {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(AUTH_ROLE_KEY);
-    localStorage.removeItem(AUTH_USER_ID_KEY);
+    useAuthStore.getState().clearAuth();
     navigate("landing");
   };
 
-  const navLinks: { id: Page; label: string }[] = [
+  const defaultNavLinks: { id: Page; label: string }[] = [
     { id: "landing", label: "Home" },
     { id: "find-jobs", label: "Find Jobs" },
     { id: "employers", label: "For Employers" },
   ];
+
+  const candidateNavLinks: { id: Page; label: string }[] = [
+    { id: "landing", label: "Home" },
+    { id: "dashboard-candidate-find-jobs", label: "Find Jobs" },
+    { id: "dashboard-candidate-home", label: "My Dashboard" },
+  ];
+
+  const navLinks = isCandidateLoggedIn ? candidateNavLinks : defaultNavLinks;
 
   return (
     <nav className="bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-50 transition-all duration-300">
@@ -90,17 +95,7 @@ export default function Navbar() {
 
             {/* CTA Buttons */}
             <div className="flex items-center space-x-3">
-              {currentPage !== "login" && !isDashboard && (
-                <button
-                  onClick={() => navigate("login")}
-                  className="flex items-center px-4 py-2.5 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-colors font-medium text-sm"
-                >
-                  <User className="w-4 h-4 mr-2" />
-                  Sign In
-                </button>
-              )}
-
-              {isDashboard ? (
+              {isCandidateLoggedIn ? (
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -109,12 +104,36 @@ export default function Navbar() {
                   Log Out
                 </button>
               ) : (
-                <button
-                  onClick={() => navigate("employers")}
-                  className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark transition-all shadow-md hover:shadow-lg shadow-primary/20 font-medium text-sm transform hover:-translate-y-0.5"
-                >
-                  Post a Job
-                </button>
+                <>
+                  {currentPage !== "login" && !isDashboard && (
+                    <button
+                      type="button"
+                      onClick={() => navigate("login")}
+                      className="flex items-center px-4 py-2.5 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-colors font-medium text-sm"
+                    >
+                      <User className="w-4 h-4 mr-2" />
+                      Sign In
+                    </button>
+                  )}
+
+                  {isDashboard ? (
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="px-5 py-2.5 bg-gray-100 text-text-primary rounded-xl hover:bg-gray-200 transition-all font-medium text-sm"
+                    >
+                      Log Out
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => navigate("employers")}
+                      className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark transition-all shadow-md hover:shadow-lg shadow-primary/20 font-medium text-sm transform hover:-translate-y-0.5"
+                    >
+                      Post a Job
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -170,7 +189,18 @@ export default function Navbar() {
           </div>
           
           <div className="grid grid-cols-2 gap-3 pt-2">
-            {isDashboard ? (
+            {isCandidateLoggedIn ? (
+              <button
+                type="button"
+                onClick={() => {
+                  handleLogout();
+                  setIsMenuOpen(false);
+                }}
+                className="col-span-2 flex justify-center items-center px-4 py-3 bg-gray-100 text-text-primary rounded-xl hover:bg-gray-200 transition-colors font-medium"
+              >
+                Log Out
+              </button>
+            ) : isDashboard ? (
               <button
                 type="button"
                 onClick={() => {
@@ -184,6 +214,7 @@ export default function Navbar() {
             ) : (
               <>
                 <button
+                  type="button"
                   onClick={() => {
                     navigate("login");
                     setIsMenuOpen(false);
@@ -193,6 +224,7 @@ export default function Navbar() {
                   Sign In
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     navigate("employers");
                     setIsMenuOpen(false);

@@ -1,14 +1,25 @@
 import React, { useState } from 'react';
-import { Search, MapPin, Filter, Building2, Clock, Star, ChevronDown, CheckCircle2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Search, MapPin, Filter, Star, ChevronDown } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useAuthStore } from '../store/authStore';
+import JobCard, { MatchScoreRing, matchTierLabel } from './JobCard';
+
+const GUEST_ROLE_DESC =
+  'We are looking for a passionate individual to join our team. This role focuses on accessibility and inclusive design principles. You will work closely with our product team to ensure our services are usable by everyone.';
+
+const GUEST_AMENITIES = [
+  'Screen Reader Compatible Software',
+  'Wheelchair Accessible Office',
+  'Flexible Remote Work Policy',
+];
 
 const jobsData = [
   {
     id: 1,
     title: "Senior Frontend Developer",
     company: "TechTunisia",
-    location: "Tunis (Hybrid)",
+    recruiterLocation: "Tunis",
+    workingConditions: "Hybrid: 3 days on-site; flexible core hours 10:00–15:00.",
     type: "Full-time",
     salary: "3.5k - 5k TND",
     tags: ["Visual Impairment Friendly", "Screen Reader Optimized"],
@@ -20,7 +31,8 @@ const jobsData = [
     id: 2,
     title: "Customer Success Specialist",
     company: "Orange",
-    location: "Remote",
+    recruiterLocation: "Tunis",
+    workingConditions: "Fully remote within Tunisia; async-first with weekly syncs.",
     type: "Contract",
     salary: "2k - 3k TND",
     tags: ["Wheelchair Accessible", "Flexible Hours"],
@@ -32,7 +44,7 @@ const jobsData = [
     id: 3,
     title: "Data Analyst",
     company: "Instadeep",
-    location: "Sfax",
+    recruiterLocation: "Sfax",
     type: "Full-time",
     salary: "4k - 6k TND",
     tags: ["Neurodiverse Friendly", "Quiet Workspace"],
@@ -44,7 +56,7 @@ const jobsData = [
     id: 4,
     title: "Graphic Designer",
     company: "Vermeg",
-    location: "Tunis",
+    recruiterLocation: "Tunis",
     type: "Part-time",
     salary: "1.5k - 2.5k TND",
     tags: ["Deaf/HoH Friendly", "Written Communication"],
@@ -56,7 +68,7 @@ const jobsData = [
     id: 5,
     title: "HR Assistant",
     company: "Sopra HR",
-    location: "Ariana",
+    recruiterLocation: "Ariana",
     type: "Internship",
     salary: "800 TND",
     tags: ["Mobility Aid", "Accessible Office"],
@@ -73,15 +85,19 @@ const filters = [
 ];
 
 export default function FindJobs() {
-  const [selectedJob, setSelectedJob] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [locationQuery, setLocationQuery] = useState('');
   const { showToast } = useToast();
+  const token = useAuthStore((s) => s.token);
+  const role = useAuthStore((s) => s.role);
+  const showMatchScore = Boolean(token && role === 'CANDIDATE');
 
   const filteredJobs = jobsData.filter(job => {
     const matchesSearch = job.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           job.company.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesLocation = job.location.toLowerCase().includes(locationQuery.toLowerCase());
+    const matchesLocation = job.recruiterLocation
+      .toLowerCase()
+      .includes(locationQuery.toLowerCase());
     return matchesSearch && matchesLocation;
   });
 
@@ -203,115 +219,49 @@ export default function FindJobs() {
               </div>
             ) : (
               filteredJobs.map((job, index) => (
-                <motion.div
-                  key={job.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  onClick={() => setSelectedJob(selectedJob === job.id ? null : job.id)}
-                  className={`bg-white rounded-2xl p-6 border transition-all cursor-pointer group hover:shadow-md ${
-                    selectedJob === job.id ? 'border-primary ring-1 ring-primary shadow-md' : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <div className="flex flex-col md:flex-row gap-4 md:items-start">
-                    {/* Logo */}
-                    <div className={`w-14 h-14 ${job.logo} rounded-xl flex items-center justify-center text-white font-bold text-xl flex-shrink-0 shadow-sm`}>
-                      {job.company.charAt(0)}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-grow">
-                      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2">
-                        <div>
-                          <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">
-                            {job.title}
-                          </h3>
-                          <div className="flex items-center text-sm text-text-secondary mt-1 gap-3 flex-wrap">
-                            <span className="flex items-center"><Building2 className="w-3.5 h-3.5 mr-1" /> {job.company}</span>
-                            <span className="flex items-center"><MapPin className="w-3.5 h-3.5 mr-1" /> {job.location}</span>
-                            <span className="flex items-center"><Clock className="w-3.5 h-3.5 mr-1" /> {job.posted}</span>
-                          </div>
-                        </div>
-                        
-                        {/* Match Score Badge */}
-                        <div className="flex items-center bg-green-50 px-3 py-1.5 rounded-full border border-green-100">
-                          <div className="w-8 h-8 rounded-full border-2 border-green-500 flex items-center justify-center mr-2 bg-white">
-                            <span className="text-[10px] font-bold text-green-700">{job.matchScore}%</span>
-                          </div>
-                          <div className="text-xs font-medium text-green-800">
-                            High Match
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Tags */}
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {job.tags.map((tag, i) => (
-                          <span key={i} className="px-3 py-1 bg-gray-50 text-text-secondary text-xs font-medium rounded-md border border-gray-100">
-                            {tag}
-                          </span>
-                        ))}
-                        <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-md border border-blue-100">
-                          {job.type}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Action */}
-                    <div className="flex flex-col items-end justify-between self-stretch">
-                      <button className="p-2 text-gray-300 hover:text-primary transition-colors">
-                        <Star className="w-5 h-5" />
-                      </button>
-                      <button 
-                        onClick={handleApply}
-                        className="hidden md:block px-6 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors shadow-sm shadow-primary/20 active:scale-95"
-                      >
-                        Apply Now
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expanded Details (Mobile/Desktop) */}
-                  {selectedJob === job.id && (
-                    <motion.div 
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      className="mt-6 pt-6 border-t border-gray-100 overflow-hidden"
+                <React.Fragment key={job.id}>
+                <JobCard
+                  motionIndex={index}
+                  variant="guest"
+                  title={job.title}
+                  company={job.company}
+                  recruiterLocation={job.recruiterLocation}
+                  workingConditions={job.workingConditions}
+                  posted={job.posted}
+                  logoClassName={job.logo}
+                  logoLetter={job.company.charAt(0)}
+                  tags={job.tags}
+                  typePill={job.type}
+                  roleDescription={GUEST_ROLE_DESC}
+                  amenities={GUEST_AMENITIES}
+                  scoreSlot={
+                    showMatchScore ? (
+                      <MatchScoreRing
+                        score={job.matchScore}
+                        label={matchTierLabel(job.matchScore)}
+                      />
+                    ) : undefined
+                  }
+                  starSlot={
+                    <button
+                      type="button"
+                      className="p-2 text-gray-300 hover:text-primary transition-colors"
+                      aria-label="Save job"
                     >
-                      <div className="grid md:grid-cols-2 gap-6">
-                        <div>
-                          <h4 className="font-semibold text-sm text-text-primary mb-2">Role Description</h4>
-                          <p className="text-sm text-text-secondary leading-relaxed">
-                            We are looking for a passionate individual to join our team. This role focuses on accessibility and inclusive design principles. You will work closely with our product team to ensure our services are usable by everyone.
-                          </p>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-sm text-text-primary mb-2">Accessibility Amenities</h4>
-                          <ul className="space-y-2">
-                            <li className="flex items-center text-sm text-text-secondary">
-                              <CheckCircle2 className="w-4 h-4 text-green-500 mr-2" />
-                              Screen Reader Compatible Software
-                            </li>
-                            <li className="flex items-center text-sm text-text-secondary">
-                              <CheckCircle2 className="w-4 h-4 text-green-500 mr-2" />
-                              Wheelchair Accessible Office
-                            </li>
-                            <li className="flex items-center text-sm text-text-secondary">
-                              <CheckCircle2 className="w-4 h-4 text-green-500 mr-2" />
-                              Flexible Remote Work Policy
-                            </li>
-                          </ul>
-                          <button 
-                            onClick={handleApply}
-                            className="w-full mt-4 md:hidden px-6 py-3 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
-                          >
-                            Apply Now
-                          </button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </motion.div>
+                      <Star className="w-5 h-5" />
+                    </button>
+                  }
+                  applySlot={
+                    <button
+                      type="button"
+                      onClick={handleApply}
+                      className="shrink-0 px-6 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary-dark transition-colors shadow-sm shadow-primary/20 active:scale-[0.98] w-full sm:w-auto"
+                    >
+                      Apply Now
+                    </button>
+                  }
+                />
+                </React.Fragment>
               ))
             )}
 
