@@ -3,14 +3,52 @@ from typing import Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
+from gridfs.errors import NoFile
 from pydantic import BaseModel, Json
 
 from auth import get_current_recruiter
-from database import db
+from database import db, fs
 from models import ContractType, OfferStatus
 from utils import upload_file_to_gridfs
 
 router = APIRouter(prefix="/job-offers", tags=["job-offers"])
+
+
+async def _enrich_offers_with_recruiter(offers: list) -> list:
+    """Attach company_name, company_logo_id, and recruiter_location from recruiters."""
+    if not offers:
+        return offers
+    rid_set = {o.get("recruiter_id") for o in offers if o.get("recruiter_id")}
+    if not rid_set:
+        return offers
+    oids = []
+    for rid in rid_set:
+        try:
+            oids.append(ObjectId(rid))
+        except Exception:
+            continue
+    if not oids:
+        return offers
+    cursor = db.recruiters.find(
+        {"_id": {"$in": oids}},
+        {"company_name": 1, "logo_id": 1, "location": 1},
+    )
+    recruiters = await cursor.to_list(length=len(oids))
+    by_id = {str(r["_id"]): r for r in recruiters}
+    for o in offers:
+        rid = o.get("recruiter_id")
+        r = by_id.get(rid) if rid else None
+        if r:
+            o["company_name"] = (r.get("company_name") or "").strip()
+            lid = r.get("logo_id")
+            o["company_logo_id"] = str(lid) if lid else None
+            o["recruiter_location"] = (r.get("location") or "").strip()
+        else:
+            o["company_name"] = ""
+            o["company_logo_id"] = None
+            o["recruiter_location"] = ""
+    return offers
 
 
 class OfferStatusUpdate(BaseModel):
@@ -62,6 +100,26 @@ async def create_job_offer(
     return {"id": offer_id}
 
 
+@router.get("/company-logo/{logo_id}")
+async def get_company_logo(logo_id: str):
+    """Public: stream recruiter company logo from GridFS (for job cards)."""
+    if not ObjectId.is_valid(logo_id):
+        raise HTTPException(status_code=400, detail="Invalid logo id.")
+    oid = ObjectId(logo_id)
+    rec = await db.recruiters.find_one(
+        {"$or": [{"logo_id": logo_id}, {"logo_id": oid}]}
+    )
+    if not rec:
+        raise HTTPException(status_code=404, detail="Not found.")
+    try:
+        grid_out = await fs.open_download_stream(ObjectId(logo_id))
+    except NoFile:
+        raise HTTPException(status_code=404, detail="File not found.")
+    data = await grid_out.read()
+    media_type = grid_out.content_type or "image/jpeg"
+    return Response(content=data, media_type=media_type)
+
+
 @router.get("/")
 async def list_active_offers():
     """List all job offers with status 'open' (public)."""
@@ -69,6 +127,7 @@ async def list_active_offers():
     offers = await cursor.to_list(length=100)
     for o in offers:
         o["_id"] = str(o["_id"])
+    await _enrich_offers_with_recruiter(offers)
     return offers
 
 
@@ -80,6 +139,7 @@ async def list_my_offers(current_user: dict = Depends(get_current_recruiter)):
     offers = await cursor.to_list(length=100)
     for o in offers:
         o["_id"] = str(o["_id"])
+    await _enrich_offers_with_recruiter(offers)
     return offers
 
 

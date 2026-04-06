@@ -1,4 +1,4 @@
-import { Search, Briefcase } from 'lucide-react';
+import { Search, Briefcase, User } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigation } from '../context/NavigationContext';
 
@@ -26,6 +26,7 @@ export default function Hero() {
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-10">
               <button 
+                type="button"
                 onClick={() => navigate('find-jobs')}
                 className="flex items-center justify-center px-8 py-4 bg-primary text-white rounded-xl font-semibold text-lg hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20 transform active:scale-95 duration-200"
               >
@@ -33,11 +34,12 @@ export default function Hero() {
                 Find Jobs
               </button>
               <button 
-                onClick={() => navigate('employers')}
+                type="button"
+                onClick={() => navigate('login')}
                 className="flex items-center justify-center px-8 py-4 border-2 border-primary text-primary bg-transparent rounded-xl font-semibold text-lg hover:bg-primary hover:text-white transition-colors transform active:scale-95 duration-200"
               >
-                <Briefcase className="w-5 h-5 mr-2" />
-                Post a Job
+                <User className="w-5 h-5 mr-2" />
+                Sign In / Register
               </button>
             </div>
 

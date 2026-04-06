@@ -5,7 +5,10 @@ export type Page =
   | "employers"
   | "dashboard"
   | "dashboard-recruiter"
-  | "dashboard-candidate";
+  | "dashboard-candidate-home"
+  | "dashboard-candidate-profile"
+  | "dashboard-candidate-find-jobs"
+  | "dashboard-candidate-applications";
 
 export interface User {
   name: string;

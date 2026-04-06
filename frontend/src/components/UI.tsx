@@ -14,19 +14,19 @@ export const Input: React.FC<InputProps> = ({ label, error, helperText, classNam
   return (
     <div className="mb-4 text-left">
       {label && (
-        <label htmlFor={inputId} className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
+        <label htmlFor={inputId} className="block text-sm font-bold text-gray-700 mb-1">
           {label}
         </label>
       )}
       {helperText && (
-        <p id={helperId} className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+        <p id={helperId} className="text-xs text-gray-500 mb-2">
           {helperText}
         </p>
       )}
       <input
         id={inputId}
-        className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white dark:bg-gray-800 dark:text-white dark:border-gray-700 ${
-          error ? 'border-red-500 ring-red-100' : 'border-gray-200'
+        className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white text-gray-900 ${
+          error ? "border-red-500 ring-red-100" : "border-gray-200"
         } ${className}`}
         aria-invalid={error ? 'true' : 'false'}
         aria-describedby={`${error ? errorId : ''} ${helperText ? helperId : ''}`.trim() || undefined}
@@ -51,7 +51,7 @@ export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { 
   const variants = {
     primary: "bg-primary text-white hover:bg-primary-dark shadow-lg hover:shadow-primary/30",
     secondary: "bg-success-green text-white hover:bg-emerald-700 shadow-lg hover:shadow-emerald-200",
-    outline: "bg-transparent border-2 border-primary text-primary hover:bg-primary/5 dark:text-primary-light dark:border-primary-light"
+    outline: "bg-transparent border-2 border-primary text-primary hover:bg-primary/5"
   };
 
   return (
@@ -65,11 +65,11 @@ export const ProgressBar: React.FC<{ current: number; total: number }> = ({ curr
   const percentage = (current / total) * 100;
   return (
     <div className="mb-8" aria-hidden="true">
-      <div className="flex justify-between text-xs font-bold text-primary dark:text-primary-light mb-2 uppercase tracking-widest">
+      <div className="flex justify-between text-xs font-bold text-primary mb-2 uppercase tracking-widest">
         <span>Step {current}</span>
         <span>{Math.round(percentage)}% Complete</span>
       </div>
-      <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+      <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
         <div 
           className="h-full bg-primary transition-all duration-700 ease-out" 
           style={{ width: `${percentage}%` }}
