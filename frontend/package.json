@@ -13,6 +13,9 @@
   "dependencies": {
     "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@tiptap/extension-underline": "^3.22.5",
+    "@tiptap/react": "^3.22.5",
+    "@tiptap/starter-kit": "^3.22.5",
     "@vitejs/plugin-react": "^5.0.4",
     "axios": "^1.14.0",
     "better-sqlite3": "^12.4.1",

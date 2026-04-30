@@ -3,7 +3,11 @@ import { Building, ChevronLeft, MapPin, Sparkles } from "lucide-react";
 import { Button } from "../../components/UI";
 import { useToast } from "../../context/ToastContext";
 import { useCandidateDashboard } from "./CandidateDashboardContext";
-import { formatEnumLabel, splitAccommodations } from "./shared";
+import {
+  formatEnumLabel,
+  hasMeaningfulHtmlText,
+  splitAccommodations,
+} from "./shared";
 
 export default function CandidateJobDetail() {
   const { showToast } = useToast();
@@ -73,10 +77,14 @@ export default function CandidateJobDetail() {
       <div className="space-y-6 text-gray-700">
         <div>
           <h3 className="text-xl font-bold text-gray-900 mb-2">Job description</h3>
-          <p className="leading-relaxed whitespace-pre-wrap">
-            {selectedJob.description?.trim() ||
-              "No description was provided for this role yet."}
-          </p>
+          {hasMeaningfulHtmlText(selectedJob.description) ? (
+            <div
+              className="prose prose-sm max-w-none text-gray-700"
+              dangerouslySetInnerHTML={{ __html: selectedJob.description ?? "" }}
+            />
+          ) : (
+            <p className="text-gray-500">No description provided.</p>
+          )}
         </div>
 
         {skills.length > 0 && (

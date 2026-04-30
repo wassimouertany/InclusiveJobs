@@ -21,24 +21,30 @@ Contrairement aux plateformes classiques, InclusiveJobs utilise l'**Intelligence
 ## 🚀 Technologies utilisées
 
 ### Backend
-| Technologie | Rôle |
-|---|---|
-| **FastAPI** | Framework API REST asynchrone |
-| **MongoDB + Motor** | Base de données NoSQL (async) |
-| **GridFS** | Stockage fichiers (CV, carte handicap, logo) |
-| **Pydantic** | Validation des données |
-| **bcrypt + JWT** | Authentification sécurisée |
-| **LangChain** | Orchestration des agents IA |
-| **Gemini API** | Intelligence Artificielle Générative |
-| **Text-Embedding-004** | Embeddings vectoriels (Google) |
-| **FAISS** | Base vectorielle pour le matching RAG |
-| **pdfplumber** | Extraction de texte des CV PDF |
+
+
+| Technologie            | Rôle                                         |
+| ---------------------- | -------------------------------------------- |
+| **FastAPI**            | Framework API REST asynchrone                |
+| **MongoDB + Motor**    | Base de données NoSQL (async)                |
+| **GridFS**             | Stockage fichiers (CV, carte handicap, logo) |
+| **Pydantic**           | Validation des données                       |
+| **bcrypt + JWT**       | Authentification sécurisée                   |
+| **LangChain**          | Orchestration des agents IA                  |
+| **Gemini API**         | Intelligence Artificielle Générative         |
+| **Text-Embedding-004** | Embeddings vectoriels (Google)               |
+| **FAISS**              | Base vectorielle pour le matching RAG        |
+| **pdfplumber**         | Extraction de texte des CV PDF               |
+
 
 ### Frontend
-| Technologie | Rôle |
-|---|---|
-| **React** | Interface utilisateur |
-| **Axios** | Appels API REST |
+
+
+| Technologie | Rôle                  |
+| ----------- | --------------------- |
+| **React**   | Interface utilisateur |
+| **Axios**   | Appels API REST       |
+
 
 ---
 
@@ -49,7 +55,7 @@ Depuis la racine du projet :
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload
+c
 ```
 
 Ou en une ligne depuis la racine (avec le bon répertoire de travail) :
@@ -58,6 +64,7 @@ Ou en une ligne depuis la racine (avec le bon répertoire de travail) :
 cd backend && uvicorn main:app --reload
 ```
 
-L’API sera disponible sur **http://localhost:8000**. La doc Swagger : **http://localhost:8000/docs**.
+L’API sera disponible sur **[http://localhost:8000](http://localhost:8000)**. La doc Swagger : **[http://localhost:8000/docs](http://localhost:8000/docs)**.
 
 ---
+

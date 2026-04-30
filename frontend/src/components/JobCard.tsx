@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Building2, MapPin, Clock, CheckCircle2 } from "lucide-react";
 import { motion, animate } from "motion/react";
 import SkillBadges from "./SkillBadges";
+import { hasMeaningfulHtmlText } from "../pages/candidate/shared";
 
 export function matchTierLabel(score: number): string {
   if (score >= 85) return "High Match";
@@ -292,7 +293,14 @@ export default function JobCard({
           <div className="mt-6 pt-6 border-t border-gray-100 grid md:grid-cols-2 gap-6">
             <div>
               <h4 className="font-bold text-sm text-gray-900 mb-2">Role description</h4>
-              <p className="text-sm text-gray-600 leading-relaxed">{roleDescription}</p>
+              {hasMeaningfulHtmlText(roleDescription) ? (
+                <div
+                  className="prose prose-sm max-w-none text-gray-700"
+                  dangerouslySetInnerHTML={{ __html: roleDescription }}
+                />
+              ) : (
+                <p className="text-sm text-gray-500">No description provided.</p>
+              )}
             </div>
             <div>
               <h4 className="font-bold text-sm text-gray-900 mb-2">Accessibility amenities</h4>
