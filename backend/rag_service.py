@@ -2,8 +2,7 @@ import os
 from typing import Optional
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
-from langchain.chains.question_answering import load_qa_chain
-from langchain.schema import Document
+from langchain_core.documents import Document
 from database import db
 from bson import ObjectId
 

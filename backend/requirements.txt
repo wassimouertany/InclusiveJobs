@@ -11,9 +11,10 @@ PyJWT
 langchain-google-genai
 langchain-community
 langchain
+langchain-core
 faiss-cpu
 google-generativeai
-pymongo[srv]
+pymongo
 pdfplumber
 pytesseract
 pdf2image

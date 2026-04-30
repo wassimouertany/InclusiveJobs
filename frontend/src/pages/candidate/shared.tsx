@@ -93,8 +93,11 @@ export function normalizeJobSkillTags(
   const out: string[] = [];
   const seen = new Set<string>();
   for (const item of raw) {
-    for (const part of item.split(",")) {
-      const p = part.trim();
+    for (const part of item.split(/[,\n;]+/)) {
+      const p = part
+        .replace(/[\[\]"]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
       if (!p) continue;
       const k = p.toLowerCase();
       if (seen.has(k)) continue;
@@ -107,9 +110,25 @@ export function normalizeJobSkillTags(
 
 /** Coerce API values to a clean string list (arrays or JSON array strings). */
 export function normalizeToStringArray(value: unknown): string[] {
+  const cleanSkill = (raw: unknown): string => {
+    let out = String(raw ?? "").trim();
+    if (!out) return "";
+    // Recover values that arrive as stringified tokens like '["Java"]'.
+    while (
+      (out.startsWith("[") && out.endsWith("]")) ||
+      (out.startsWith('"') && out.endsWith('"')) ||
+      (out.startsWith("'") && out.endsWith("'"))
+    ) {
+      out = out.slice(1, -1).trim();
+      if (!out) break;
+    }
+    out = out.replace(/[\[\]"]/g, "").replace(/\s+/g, " ").trim();
+    return out;
+  };
+
   if (value == null) return [];
   if (Array.isArray(value)) {
-    return value.map((v) => String(v).trim()).filter(Boolean);
+    return value.map((v) => cleanSkill(v)).filter(Boolean);
   }
   if (typeof value === "string") {
     const t = value.trim();
@@ -118,16 +137,23 @@ export function normalizeToStringArray(value: unknown): string[] {
       try {
         const parsed: unknown = JSON.parse(t);
         if (Array.isArray(parsed)) {
-          return parsed.map((v) => String(v).trim()).filter(Boolean);
+          return parsed.map((v) => cleanSkill(v)).filter(Boolean);
         }
         return [];
       } catch {
-        return [t];
+        return [cleanSkill(t)].filter(Boolean);
       }
     }
-    return [t];
+    return [cleanSkill(t)].filter(Boolean);
   }
   return [];
+}
+
+/** Whether rich-text HTML contains meaningful text (not just empty tags). */
+export function hasMeaningfulHtmlText(raw?: string): boolean {
+  if (!raw?.trim()) return false;
+  const text = raw.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return Boolean(text);
 }
 
 export function PillList({ items }: { items: string[] }) {

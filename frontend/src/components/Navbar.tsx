@@ -1,14 +1,20 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { User, Menu, X, Heart } from "lucide-react";
 import { useNavigation } from "../context/NavigationContext";
 import { useAuthStore } from "../config/auth";
 import { Page, UserRole } from "../types";
+import { apiClient } from "../services/apiClient";
+import { initials } from "../pages/candidate/shared";
+import type { CandidateProfile } from "../pages/candidate/types";
 
 export default function Navbar() {
   const { currentPage, navigate } = useNavigation();
   const role = useAuthStore((s) => s.role);
   const [lang, setLang] = useState<"EN" | "FR" | "AR">("EN");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const isCandidateLoggedIn = role === UserRole.CANDIDATE;
 
@@ -35,6 +41,58 @@ export default function Navbar() {
   ];
 
   const navLinks = isCandidateLoggedIn ? candidateNavLinks : defaultNavLinks;
+
+  useEffect(() => {
+    if (!isCandidateLoggedIn) {
+      setCandidateProfile(null);
+      setAvatarUrl(null);
+      setAvatarFailed(false);
+      return;
+    }
+    let cancelled = false;
+    let blobUrl: string | null = null;
+
+    (async () => {
+      try {
+        const profileRes = await apiClient.get<CandidateProfile>("/users/candidates/me", {
+          validateStatus: () => true,
+        });
+        if (!cancelled && profileRes.status >= 200 && profileRes.status < 300) {
+          setCandidateProfile(profileRes.data);
+        }
+      } catch {
+        if (!cancelled) setCandidateProfile(null);
+      }
+
+      try {
+        const avatarRes = await apiClient.get("/users/candidates/me/profile-photo", {
+          responseType: "blob",
+          validateStatus: () => true,
+        });
+        if (cancelled) return;
+        if (avatarRes.status >= 200 && avatarRes.status < 300) {
+          blobUrl = URL.createObjectURL(avatarRes.data);
+          setAvatarUrl(blobUrl);
+          setAvatarFailed(false);
+        } else {
+          setAvatarUrl(null);
+        }
+      } catch {
+        if (!cancelled) setAvatarUrl(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [isCandidateLoggedIn, role]);
+
+  const candidateDisplayName = useMemo(() => {
+    const first = candidateProfile?.first_name?.trim() || "";
+    const last = candidateProfile?.last_name?.trim() || "";
+    return `${first} ${last}`.trim() || "Candidate";
+  }, [candidateProfile?.first_name, candidateProfile?.last_name]);
 
   return (
     <nav className="bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-50 transition-all duration-300">
@@ -96,13 +154,37 @@ export default function Navbar() {
             {/* CTA Buttons */}
             <div className="flex items-center space-x-3">
               {isCandidateLoggedIn ? (
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="px-5 py-2.5 bg-gray-100 text-text-primary rounded-xl hover:bg-gray-200 transition-all font-medium text-sm"
-                >
-                  Log Out
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => navigate("dashboard-candidate-profile")}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-border hover:bg-gray-50 transition-colors"
+                    title="Go to profile"
+                  >
+                    <span className="w-9 h-9 rounded-full bg-primary text-white text-sm font-bold shrink-0 overflow-hidden flex items-center justify-center ring-2 ring-gray-100">
+                      {avatarUrl && !avatarFailed ? (
+                        <img
+                          src={avatarUrl}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          onError={() => setAvatarFailed(true)}
+                        />
+                      ) : (
+                        initials(candidateProfile?.first_name, candidateProfile?.last_name)
+                      )}
+                    </span>
+                    <span className="text-sm font-medium text-text-primary max-w-[150px] truncate">
+                      {candidateDisplayName}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="px-5 py-2.5 bg-gray-100 text-text-primary rounded-xl hover:bg-gray-200 transition-all font-medium text-sm"
+                  >
+                    Log Out
+                  </button>
+                </>
               ) : (
                 <>
                   {currentPage !== "login" && !isDashboard && (
