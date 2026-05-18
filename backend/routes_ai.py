@@ -10,7 +10,7 @@ router = APIRouter(prefix="/ai", tags=["ai-matching"])
 @router.get("/matches/for-offer/{offer_id}")
 async def get_candidates_for_offer(
     offer_id: str,
-    top_k: int = 10,
+    top_k: int = 5,
     current_user: dict = Depends(get_current_recruiter),
 ):
     """
@@ -35,7 +35,7 @@ async def get_candidates_for_offer(
 
 @router.get("/matches/for-candidate")
 async def get_offers_for_candidate(
-    top_k: int = 10,
+    top_k: int = 5,
     current_user: dict = Depends(get_current_candidate),
 ):
     """

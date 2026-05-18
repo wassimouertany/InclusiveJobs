@@ -12,7 +12,6 @@ import {
   EyeOff,
   LogIn,
   UserPlus,
-  Volume2,
   Globe,
   Linkedin,
   ChevronRight,
@@ -165,8 +164,6 @@ const translations = {
     extractedSkills: "Your AI-Extracted Skills",
     uploadPrompt: "Upload resume to see skills.",
     or: "or",
-    verification: "Human Verification",
-    playAudio: "Play Audio Code",
     placeholderEmail: "name@professional.com",
     placeholderName: "e.g., Alex Johnson",
     placeholderComp: "e.g., Global Tech Solutions",
@@ -231,8 +228,6 @@ const translations = {
     extractedSkills: "Vos compétences extraites par l'IA",
     uploadPrompt: "Téléchargez un CV pour voir les compétences.",
     or: "ou",
-    verification: "Vérification humaine",
-    playAudio: "Lire le code audio",
     placeholderEmail: "nom@professionnel.com",
     placeholderName: "ex: Jean Dupont",
     placeholderComp: "ex: Global Tech Solutions",
@@ -297,8 +292,6 @@ const translations = {
     extractedSkills: "مهاراتك المستخرجة بواسطة الذكاء الاصطناعي",
     uploadPrompt: "ارفع سيرتك الذاتية لرؤية المهارات.",
     or: "أو",
-    verification: "التحقق البشري",
-    playAudio: "تشغيل الرمز الصوتي",
     placeholderEmail: "الاسم@النطاق.com",
     placeholderName: "مثال: أحمد علي",
     placeholderComp: "مثال: شركة التقنية العالمية",
@@ -546,17 +539,6 @@ export default function Login() {
     }
   };
 
-  const playAudioCaptcha = () => {
-    const msgString =
-      lang === Language.AR
-        ? "يرجى إدخال الأرقام 4 2 9 0"
-        : "Please enter the numbers 4 2 9 0";
-    const msg = new SpeechSynthesisUtterance(msgString);
-    msg.lang =
-      lang === Language.AR ? "ar-SA" : lang === Language.FR ? "fr-FR" : "en-US";
-    window.speechSynthesis.speak(msg);
-  };
-
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -734,28 +716,6 @@ export default function Login() {
                 >
                   {showPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                 </button>
-              </div>
-
-              <div className="p-5 bg-primary/10 rounded-[1.5rem] border border-primary/30 flex items-center justify-between">
-                <div className="text-left">
-                  <h3 className="text-sm font-black text-gray-900 mb-1">
-                    {t.verification}
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={playAudioCaptcha}
-                    className="flex items-center gap-2 text-xs text-primary font-bold hover:underline"
-                  >
-                    <Volume2 size={16} /> {t.playAudio}
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  className="w-24 px-4 py-3 border-2 border-gray-200 rounded-xl bg-white text-gray-900 font-mono text-center focus:border-primary outline-none"
-                  placeholder="0000"
-                  aria-label="Enter verification code"
-                  required
-                />
               </div>
 
               <Button

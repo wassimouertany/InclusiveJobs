@@ -7,16 +7,33 @@ import { apiClient } from "../services/apiClient";
 import { initials } from "../pages/candidate/shared";
 import type { CandidateProfile } from "../pages/candidate/types";
 
+type RecruiterProfile = {
+  company_name?: string;
+};
+
+function companyInitials(name?: string): string {
+  const clean = (name || "").trim();
+  if (!clean) return "RC";
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`.toUpperCase();
+  }
+  return clean.slice(0, 2).toUpperCase();
+}
+
 export default function Navbar() {
   const { currentPage, navigate } = useNavigation();
   const role = useAuthStore((s) => s.role);
   const [lang, setLang] = useState<"EN" | "FR" | "AR">("EN");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
+  const [recruiterProfile, setRecruiterProfile] = useState<RecruiterProfile | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
   const isCandidateLoggedIn = role === UserRole.CANDIDATE;
+  const isRecruiterLoggedIn = role === UserRole.COMPANY;
+  const isLoggedIn = isCandidateLoggedIn || isRecruiterLoggedIn;
 
   const isDashboard =
     currentPage === "dashboard" ||
@@ -39,12 +56,22 @@ export default function Navbar() {
     { id: "dashboard-candidate-find-jobs", label: "Find Jobs" },
     { id: "dashboard-candidate-home", label: "My Dashboard" },
   ];
+  const recruiterNavLinks: { id: Page; label: string }[] = [
+    { id: "landing", label: "Home" },
+    { id: "find-jobs", label: "Find Jobs" },
+    { id: "dashboard-recruiter", label: "My Dashboard" },
+  ];
 
-  const navLinks = isCandidateLoggedIn ? candidateNavLinks : defaultNavLinks;
+  const navLinks = isCandidateLoggedIn
+    ? candidateNavLinks
+    : isRecruiterLoggedIn
+      ? recruiterNavLinks
+      : defaultNavLinks;
 
   useEffect(() => {
-    if (!isCandidateLoggedIn) {
+    if (!isLoggedIn) {
       setCandidateProfile(null);
+      setRecruiterProfile(null);
       setAvatarUrl(null);
       setAvatarFailed(false);
       return;
@@ -53,25 +80,58 @@ export default function Navbar() {
     let blobUrl: string | null = null;
 
     (async () => {
+      if (isCandidateLoggedIn) {
+        setRecruiterProfile(null);
+        try {
+          const profileRes = await apiClient.get<CandidateProfile>("/users/candidates/me", {
+            validateStatus: () => true,
+          });
+          if (!cancelled && profileRes.status >= 200 && profileRes.status < 300) {
+            setCandidateProfile(profileRes.data);
+          }
+        } catch {
+          if (!cancelled) setCandidateProfile(null);
+        }
+
+        try {
+          const avatarRes = await apiClient.get("/users/candidates/me/profile-photo", {
+            responseType: "blob",
+            validateStatus: () => true,
+          });
+          if (cancelled) return;
+          if (avatarRes.status >= 200 && avatarRes.status < 300) {
+            blobUrl = URL.createObjectURL(avatarRes.data);
+            setAvatarUrl(blobUrl);
+            setAvatarFailed(false);
+          } else {
+            setAvatarUrl(null);
+          }
+        } catch {
+          if (!cancelled) setAvatarUrl(null);
+        }
+        return;
+      }
+
+      setCandidateProfile(null);
       try {
-        const profileRes = await apiClient.get<CandidateProfile>("/users/candidates/me", {
+        const profileRes = await apiClient.get<RecruiterProfile>("/users/recruiters/me", {
           validateStatus: () => true,
         });
         if (!cancelled && profileRes.status >= 200 && profileRes.status < 300) {
-          setCandidateProfile(profileRes.data);
+          setRecruiterProfile(profileRes.data);
         }
       } catch {
-        if (!cancelled) setCandidateProfile(null);
+        if (!cancelled) setRecruiterProfile(null);
       }
 
       try {
-        const avatarRes = await apiClient.get("/users/candidates/me/profile-photo", {
+        const logoRes = await apiClient.get("/users/recruiters/me/logo", {
           responseType: "blob",
           validateStatus: () => true,
         });
         if (cancelled) return;
-        if (avatarRes.status >= 200 && avatarRes.status < 300) {
-          blobUrl = URL.createObjectURL(avatarRes.data);
+        if (logoRes.status >= 200 && logoRes.status < 300) {
+          blobUrl = URL.createObjectURL(logoRes.data);
           setAvatarUrl(blobUrl);
           setAvatarFailed(false);
         } else {
@@ -86,13 +146,16 @@ export default function Navbar() {
       cancelled = true;
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [isCandidateLoggedIn, role]);
+  }, [isCandidateLoggedIn, isLoggedIn, role]);
 
   const candidateDisplayName = useMemo(() => {
     const first = candidateProfile?.first_name?.trim() || "";
     const last = candidateProfile?.last_name?.trim() || "";
     return `${first} ${last}`.trim() || "Candidate";
   }, [candidateProfile?.first_name, candidateProfile?.last_name]);
+  const recruiterDisplayName = useMemo(() => {
+    return recruiterProfile?.company_name?.trim() || "Recruiter";
+  }, [recruiterProfile?.company_name]);
 
   return (
     <nav className="bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-50 transition-all duration-300">
@@ -153,11 +216,17 @@ export default function Navbar() {
 
             {/* CTA Buttons */}
             <div className="flex items-center space-x-3">
-              {isCandidateLoggedIn ? (
+              {isLoggedIn ? (
                 <>
                   <button
                     type="button"
-                    onClick={() => navigate("dashboard-candidate-profile")}
+                    onClick={() =>
+                      navigate(
+                        isCandidateLoggedIn
+                          ? "dashboard-candidate-profile"
+                          : "dashboard-recruiter"
+                      )
+                    }
                     className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-border hover:bg-gray-50 transition-colors"
                     title="Go to profile"
                   >
@@ -170,11 +239,13 @@ export default function Navbar() {
                           onError={() => setAvatarFailed(true)}
                         />
                       ) : (
-                        initials(candidateProfile?.first_name, candidateProfile?.last_name)
+                        isCandidateLoggedIn
+                          ? initials(candidateProfile?.first_name, candidateProfile?.last_name)
+                          : companyInitials(recruiterDisplayName)
                       )}
                     </span>
                     <span className="text-sm font-medium text-text-primary max-w-[150px] truncate">
-                      {candidateDisplayName}
+                      {isCandidateLoggedIn ? candidateDisplayName : recruiterDisplayName}
                     </span>
                   </button>
                   <button
@@ -271,7 +342,7 @@ export default function Navbar() {
           </div>
           
           <div className="grid grid-cols-2 gap-3 pt-2">
-            {isCandidateLoggedIn ? (
+            {isLoggedIn ? (
               <button
                 type="button"
                 onClick={() => {

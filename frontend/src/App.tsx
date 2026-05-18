@@ -8,7 +8,6 @@ import Features from "./components/Features";
 import Testimonials from "./components/Testimonials";
 import Footer from "./components/Footer";
 import Login from "./components/Login";
-import FindJobs from "./components/FindJobs";
 import ForEmployers from "./components/ForEmployers";
 import Dashboard from "./components/Dashboard";
 import CandidateLayout from "./pages/candidate/CandidateLayout";
@@ -17,7 +16,12 @@ import CandidateProfile from "./pages/candidate/CandidateProfile";
 import CandidateFindJobs from "./pages/candidate/CandidateFindJobs";
 import CandidateApplications from "./pages/candidate/CandidateApplications";
 import AccessibilityWidget from "./components/AccessibilityWidget";
-import RecruiterDashboard from "./components/RecruiterDashboard";
+import RecruiterLayout from "./pages/recruiter/RecruiterLayout";
+import RecruiterJobsPage from "./pages/recruiter/RecruiterJobsPage";
+import RecruiterMatchesPage from "./pages/recruiter/RecruiterMatchesPage";
+import RecruiterSearchPage from "./pages/recruiter/RecruiterSearchPage";
+import RecruiterProfilePage from "./pages/recruiter/RecruiterProfilePage";
+import RecruiterCandidateView from "./pages/recruiter/RecruiterCandidateView";
 
 function LandingPage() {
   return (
@@ -50,10 +54,17 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/find-jobs" element={<FindJobs />} />
+        <Route path="/find-jobs" element={<CandidateFindJobs />} />
         <Route path="/employers" element={<ForEmployers />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/dashboard/recruiter" element={<RecruiterDashboard />} />
+        <Route path="/dashboard/recruiter" element={<RecruiterLayout />}>
+          <Route index element={<Navigate to="/dashboard/recruiter/jobs" replace />} />
+          <Route path="jobs" element={<RecruiterJobsPage />} />
+          <Route path="matches" element={<RecruiterMatchesPage />} />
+          <Route path="search" element={<RecruiterSearchPage />} />
+          <Route path="profile" element={<RecruiterProfilePage />} />
+        </Route>
+        <Route path="/dashboard/recruiter/candidate/:candidateId" element={<RecruiterCandidateView />} />
         <Route path="/dashboard/candidate" element={<CandidateLayout />}>
           <Route
             index

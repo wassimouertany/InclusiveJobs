@@ -187,3 +187,7 @@ export function useCandidateDashboard() {
   }
   return ctx;
 }
+
+export function useCandidateDashboardOptional() {
+  return useContext(CandidateDashboardContext) ?? null;
+}

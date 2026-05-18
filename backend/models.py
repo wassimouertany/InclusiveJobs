@@ -189,6 +189,9 @@ class JobOfferDB(BaseModel):
     key_skills: list[str] = Field(default_factory=list)
     working_conditions: str = ""
     possible_accommodations: str = ""
+    saved_candidates: list[str] = Field(
+        default_factory=list
+    )  # list of candidate_ids saved by recruiter
     status: OfferStatus = Field(default=OfferStatus.OPEN)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

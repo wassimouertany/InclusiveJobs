@@ -73,6 +73,16 @@ def get_llm():
     )
 
 
+def invalidate_candidate_index_cache() -> None:
+    """Compatibility no-op for callers expecting cache invalidation hook."""
+    return
+
+
+def invalidate_offer_index_cache() -> None:
+    """Compatibility no-op for callers expecting cache invalidation hook."""
+    return
+
+
 async def get_all_candidates_as_docs() -> list[Document]:
     """Fetch all active candidates and turn them into LangChain Documents."""
     cursor = db.candidates.find({"availability_status": "actively_looking"})

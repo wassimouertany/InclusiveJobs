@@ -169,6 +169,8 @@ export type JobCardProps = {
   variant?: "guest" | "candidate";
   /** Parent handles stagger (e.g. recommendations) — disables card entrance motion. */
   entranceDisabled?: boolean;
+  /** When false, hide the in-card role description & amenities (e.g. candidate browse — use Details). */
+  showRoleAndAmenities?: boolean;
 };
 
 export default function JobCard({
@@ -194,6 +196,7 @@ export default function JobCard({
   applySlot,
   variant = "candidate",
   entranceDisabled = false,
+  showRoleAndAmenities = true,
 }: JobCardProps) {
   const shell =
     variant === "guest"
@@ -290,37 +293,39 @@ export default function JobCard({
             </div>
           </div>
 
-          <div className="mt-6 pt-6 border-t border-gray-100 grid md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="font-bold text-sm text-gray-900 mb-2">Role description</h4>
-              {hasMeaningfulHtmlText(roleDescription) ? (
-                <div
-                  className="prose prose-sm max-w-none text-gray-700"
-                  dangerouslySetInnerHTML={{ __html: roleDescription }}
-                />
-              ) : (
-                <p className="text-sm text-gray-500">No description provided.</p>
-              )}
+          {showRoleAndAmenities ? (
+            <div className="mt-6 pt-6 border-t border-gray-100 grid md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-bold text-sm text-gray-900 mb-2">Role description</h4>
+                {hasMeaningfulHtmlText(roleDescription) ? (
+                  <div
+                    className="prose prose-sm max-w-none text-gray-700"
+                    dangerouslySetInnerHTML={{ __html: roleDescription }}
+                  />
+                ) : (
+                  <p className="text-sm text-gray-500">No description provided.</p>
+                )}
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-gray-900 mb-2">Accessibility amenities</h4>
+                {amenities.length > 0 ? (
+                  <ul className="space-y-2">
+                    {amenities.map((line, i) => (
+                      <li key={`am-${i}`} className="flex items-start text-sm text-gray-600">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 mr-2 shrink-0 mt-0.5" />
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    No specific accommodations listed yet. Check the role description or contact
+                    the employer.
+                  </p>
+                )}
+              </div>
             </div>
-            <div>
-              <h4 className="font-bold text-sm text-gray-900 mb-2">Accessibility amenities</h4>
-              {amenities.length > 0 ? (
-                <ul className="space-y-2">
-                  {amenities.map((line, i) => (
-                    <li key={`am-${i}`} className="flex items-start text-sm text-gray-600">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 mr-2 shrink-0 mt-0.5" />
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-500">
-                  No specific accommodations listed yet. Check the role description or contact
-                  the employer.
-                </p>
-              )}
-            </div>
-          </div>
+          ) : null}
 
           {aiInsightSlot ? (
             <div className="mt-6 pt-6 border-t border-indigo-100/80">{aiInsightSlot}</div>
