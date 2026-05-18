@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { Navigate } from "react-router-dom";
 import { useNavigation } from "../context/NavigationContext";
 import { useAuthStore } from "../config/auth";
-import RecruiterDashboard from "./RecruiterDashboard";
 import { UserRole } from "../types";
 
 export default function Dashboard() {
   const { navigate } = useNavigation();
-  const [role, setRole] = useState<string | null>(null);
   const storedRole = useAuthStore((s) => s.role);
 
   useEffect(() => {
@@ -16,12 +15,10 @@ export default function Dashboard() {
     }
     if (storedRole === UserRole.CANDIDATE) {
       navigate("dashboard-candidate-home");
-      return;
     }
-    setRole(storedRole);
   }, [navigate, storedRole]);
 
-  if (!role) {
+  if (!storedRole) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-page">
         Loading...
@@ -29,5 +26,21 @@ export default function Dashboard() {
     );
   }
 
-  return <RecruiterDashboard />;
+  if (storedRole === UserRole.CANDIDATE) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg-page">
+        Loading...
+      </div>
+    );
+  }
+
+  if (storedRole === UserRole.COMPANY) {
+    return <Navigate to="/dashboard/recruiter/jobs" replace />;
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-bg-page">
+      Unsupported role.
+    </div>
+  );
 }

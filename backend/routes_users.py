@@ -12,6 +12,7 @@ from auth import (
     create_access_token,
     get_current_admin,
     get_current_candidate,
+    get_current_recruiter,
     verify_password,
 )
 from database import db, fs
@@ -22,6 +23,7 @@ from resume_extraction import (
 )
 from services.parser_service import normalize_birth_date_iso, parse_document_text
 from utils import upload_file_to_gridfs
+from rag_service import invalidate_candidate_index_cache
 from models import (
     AdminCreate,
     AvailabilityStatus,
@@ -309,6 +311,7 @@ async def register_candidate(
 
     result = await db.candidates.insert_one(candidate_dict)
     candidate_id = str(result.inserted_id)
+    invalidate_candidate_index_cache()
 
     return {
         "id": candidate_id,
@@ -518,6 +521,104 @@ async def get_my_profile(current_user: dict = Depends(get_current_candidate)):
 async def get_my_profile_photo(current_user: dict = Depends(get_current_candidate)):
     """Stream the candidate's profile picture from GridFS (JWT required)."""
     logo_id = current_user.get("logo_id")
+    if not logo_id or not ObjectId.is_valid(str(logo_id)):
+        raise HTTPException(status_code=404, detail="No profile photo.")
+
+    try:
+        grid_out = await fs.open_download_stream(ObjectId(str(logo_id)))
+    except NoFile:
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    data = await grid_out.read()
+    media_type = grid_out.content_type or "image/jpeg"
+    return Response(content=data, media_type=media_type)
+
+
+@router.get("/recruiters/me")
+async def get_my_recruiter_profile(current_user: dict = Depends(get_current_recruiter)):
+    """Return the currently authenticated recruiter's own profile."""
+    current_user["_id"] = str(current_user["_id"])
+    current_user.pop("password", None)
+    return current_user
+
+
+@router.get("/recruiters/me/logo")
+async def get_my_recruiter_logo(current_user: dict = Depends(get_current_recruiter)):
+    """Stream the recruiter's company logo from GridFS (JWT required)."""
+    logo_id = current_user.get("logo_id")
+    if not logo_id or not ObjectId.is_valid(str(logo_id)):
+        raise HTTPException(status_code=404, detail="No logo.")
+
+    try:
+        grid_out = await fs.open_download_stream(ObjectId(str(logo_id)))
+    except NoFile:
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    data = await grid_out.read()
+    media_type = grid_out.content_type or "image/jpeg"
+    return Response(content=data, media_type=media_type)
+
+
+@router.get("/candidates/{candidate_id}")
+async def get_candidate_by_id(candidate_id: str):
+    """Public candidate profile endpoint for recruiter viewing."""
+    if not ObjectId.is_valid(candidate_id):
+        raise HTTPException(status_code=400, detail="Invalid candidate ID.")
+
+    candidate = await db.candidates.find_one({"_id": ObjectId(candidate_id)})
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+
+    candidate["_id"] = str(candidate["_id"])
+    candidate.pop("password", None)
+    candidate.pop("resume_text_raw", None)
+    candidate.pop("disability_card_id", None)
+
+    logo_id = candidate.get("logo_id")
+    if logo_id and ObjectId.is_valid(str(logo_id)):
+        candidate["photo_url"] = f"/users/candidates/{candidate['_id']}/photo"
+
+    return candidate
+
+
+@router.get("/candidates/{candidate_id}/resume")
+async def get_candidate_resume(candidate_id: str):
+    """Public candidate resume stream endpoint."""
+    if not ObjectId.is_valid(candidate_id):
+        raise HTTPException(status_code=400, detail="Invalid candidate ID.")
+
+    candidate = await db.candidates.find_one({"_id": ObjectId(candidate_id)}, {"resume_id": 1})
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+
+    resume_id = candidate.get("resume_id")
+    if not resume_id or not ObjectId.is_valid(str(resume_id)):
+        raise HTTPException(status_code=404, detail="No resume found.")
+
+    try:
+        grid_out = await fs.open_download_stream(ObjectId(str(resume_id)))
+    except NoFile:
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    data = await grid_out.read()
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="resume.pdf"'},
+    )
+
+
+@router.get("/candidates/{candidate_id}/photo")
+async def get_candidate_photo(candidate_id: str):
+    """Public candidate photo stream endpoint."""
+    if not ObjectId.is_valid(candidate_id):
+        raise HTTPException(status_code=400, detail="Invalid candidate ID.")
+
+    candidate = await db.candidates.find_one({"_id": ObjectId(candidate_id)}, {"logo_id": 1})
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+
+    logo_id = candidate.get("logo_id")
     if not logo_id or not ObjectId.is_valid(str(logo_id)):
         raise HTTPException(status_code=404, detail="No profile photo.")
 

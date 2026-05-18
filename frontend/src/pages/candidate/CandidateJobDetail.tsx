@@ -101,11 +101,9 @@ export default function CandidateJobDetail() {
         <div>
           <h3 className="text-xl font-bold text-gray-900 mb-2">Accommodations</h3>
           {accommodations.length > 0 ? (
-            <ul className="list-disc pl-5 space-y-1">
-              {accommodations.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              {accommodations.join("; ")}
+            </p>
           ) : (
             <p className="text-gray-500 text-sm">
               No specific accommodations listed for this role.
