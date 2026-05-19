@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { User, Menu, X, Heart } from "lucide-react";
 import { useNavigation } from "../context/NavigationContext";
 import { useAuthStore } from "../config/auth";
+import NotificationBell from "./NotificationBell";
 import { Page, UserRole } from "../types";
 import { apiClient } from "../services/apiClient";
 import { initials } from "../pages/candidate/shared";
@@ -166,10 +167,10 @@ export default function Navbar() {
             className="flex items-center cursor-pointer group"
             onClick={() => navigate("landing")}
           >
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center mr-3 shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
+            <div className="w-10 h-10 bg-linear-to-br from-primary to-primary-light rounded-xl flex items-center justify-center mr-3 shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
               <Heart className="text-white w-6 h-6 fill-current" />
             </div>
-            <span className="font-bold text-xl text-text-primary tracking-tight group-hover:text-primary transition-colors">
+            <span className="font-display font-bold text-xl text-text-primary tracking-tight group-hover:text-primary transition-colors">
               InclusiveJobs
             </span>
           </div>
@@ -198,14 +199,14 @@ export default function Navbar() {
             <div className="h-6 w-px bg-gray-200"></div>
 
             {/* Language Switcher */}
-            <div className="flex items-center bg-gray-100/50 rounded-lg p-1 border border-border/50">
+            <div className="flex items-center bg-gray-100/60 rounded-full p-1 border border-border/50">
               {(['EN', 'FR', 'AR'] as const).map((l) => (
                 <button
                   key={l}
                   onClick={() => setLang(l)}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  className={`px-3 py-1 text-xs font-semibold rounded-full transition-all ${
                     lang === l
-                      ? 'bg-white text-primary shadow-sm border border-gray-100'
+                      ? 'bg-primary text-white shadow-sm'
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
@@ -218,6 +219,7 @@ export default function Navbar() {
             <div className="flex items-center space-x-3">
               {isLoggedIn ? (
                 <>
+                  <NotificationBell />
                   <button
                     type="button"
                     onClick={() =>
@@ -251,7 +253,7 @@ export default function Navbar() {
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="px-5 py-2.5 bg-gray-100 text-text-primary rounded-xl hover:bg-gray-200 transition-all font-medium text-sm"
+                    className="px-5 py-2.5 border border-border text-text-secondary rounded-xl hover:border-primary hover:text-primary transition-all font-medium text-sm bg-transparent"
                   >
                     Log Out
                   </button>

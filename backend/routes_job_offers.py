@@ -33,7 +33,7 @@ async def _enrich_offers_with_recruiter(offers: list) -> list:
         return offers
     cursor = db.recruiters.find(
         {"_id": {"$in": oids}},
-        {"company_name": 1, "logo_id": 1, "location": 1},
+        {"company_name": 1, "logo_id": 1, "location": 1, "company_industry": 1},
     )
     recruiters = await cursor.to_list(length=len(oids))
     by_id = {str(r["_id"]): r for r in recruiters}
@@ -45,10 +45,12 @@ async def _enrich_offers_with_recruiter(offers: list) -> list:
             lid = r.get("logo_id")
             o["company_logo_id"] = str(lid) if lid else None
             o["recruiter_location"] = (r.get("location") or "").strip()
+            o["sector"] = (r.get("company_industry") or "").strip()
         else:
             o["company_name"] = ""
             o["company_logo_id"] = None
             o["recruiter_location"] = ""
+            o["sector"] = ""
     return offers
 
 
@@ -76,6 +78,11 @@ async def create_job_offer(
     """
     recruiter_id = str(current_user["_id"])
 
+    recruiter = await db.recruiters.find_one(
+        {"_id": current_user["_id"]}, {"company_industry": 1}
+    )
+    sector = (recruiter.get("company_industry") or "").strip() if recruiter else ""
+
     document_id: Optional[str] = None
     if document and document.filename:
         document_id = await upload_file_to_gridfs(document)
@@ -89,6 +96,7 @@ async def create_job_offer(
         "profile_title": profile_title,
         "contract_type": contract_type.value,
         "key_skills": key_skills,
+        "sector": sector,
         "working_conditions": working_conditions,
         "possible_accommodations": possible_accommodations,
         "status": "open",

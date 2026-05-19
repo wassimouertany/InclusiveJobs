@@ -22,7 +22,7 @@ from resume_extraction import (
     extract_text_from_resume_pdf,
 )
 from services.parser_service import normalize_birth_date_iso, parse_document_text
-from utils import upload_file_to_gridfs
+from utils import upload_file_to_gridfs, upload_file_to_gridfs_bytes
 from rag_service import invalidate_candidate_index_cache
 from models import (
     AdminCreate,
@@ -515,6 +515,89 @@ async def get_my_profile(current_user: dict = Depends(get_current_candidate)):
     current_user["_id"] = str(current_user["_id"])
     current_user.pop("password", None)
     return current_user
+
+
+@router.patch("/candidates/me")
+async def update_candidate_profile(
+    current_user: dict = Depends(get_current_candidate),
+    # Text fields (all optional)
+    first_name: Optional[str] = Form(None),
+    last_name: Optional[str] = Form(None),
+    phone_number: Optional[str] = Form(None),
+    address: Optional[str] = Form(None),
+    industry: Optional[str] = Form(None),
+    profile_title: Optional[str] = Form(None),
+    years_of_experience: Optional[int] = Form(None),
+    education_level: Optional[str] = Form(None),
+    work_preference: Optional[str] = Form(None),
+    availability_status: Optional[str] = Form(None),
+    disability_type: Optional[str] = Form(None),
+    accessibility_needs: Optional[str] = Form(None),
+    key_skills: Optional[Json[list[str]]] = Form(None),
+    work_accommodations: Optional[Json[list[str]]] = Form(None),
+    # File uploads (all optional)
+    photo: Optional[UploadFile] = File(None),
+    resume: Optional[UploadFile] = File(None),
+    disability_card: Optional[UploadFile] = File(None),
+):
+    """Update the currently authenticated candidate's profile. All fields optional."""
+    candidate_id = current_user["_id"]
+    update: dict = {"updated_at": datetime.now(timezone.utc)}
+
+    for field, value in [
+        ("first_name", first_name),
+        ("last_name", last_name),
+        ("phone_number", phone_number),
+        ("address", address),
+        ("industry", industry),
+        ("profile_title", profile_title),
+        ("work_preference", work_preference),
+        ("availability_status", availability_status),
+        ("disability_type", disability_type),
+        ("accessibility_needs", accessibility_needs),
+    ]:
+        if value is not None:
+            update[field] = value.strip() if isinstance(value, str) else value
+
+    if years_of_experience is not None:
+        update["years_of_experience"] = years_of_experience
+    if education_level is not None:
+        update["education_level"] = education_level
+    if key_skills is not None:
+        update["key_skills"] = key_skills
+    if work_accommodations is not None:
+        update["work_accommodations"] = work_accommodations
+
+    if photo and photo.filename:
+        photo_id = await upload_file_to_gridfs(photo)
+        update["logo_id"] = photo_id
+
+    if resume and resume.filename:
+        if not resume.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Resume must be a PDF.")
+        resume_bytes = await resume.read()
+        resume_id = await upload_file_to_gridfs_bytes(
+            resume_bytes, resume.filename, "application/pdf"
+        )
+        update["resume_id"] = resume_id
+        raw_text = extract_text_from_resume_pdf(resume_bytes) if resume_bytes else ""
+        update["resume_text_raw"] = raw_text[:12000]
+
+    if disability_card and disability_card.filename:
+        card_id = await upload_file_to_gridfs(disability_card)
+        update["disability_card_id"] = card_id
+
+    if len(update) <= 1:  # only updated_at — nothing substantive
+        raise HTTPException(status_code=400, detail="No fields provided to update.")
+
+    await db.candidates.update_one({"_id": candidate_id}, {"$set": update})
+    invalidate_candidate_index_cache()
+
+    updated = await db.candidates.find_one({"_id": candidate_id})
+    updated["_id"] = str(updated["_id"])
+    updated.pop("password", None)
+    updated.pop("resume_text_raw", None)
+    return updated
 
 
 @router.get("/candidates/me/profile-photo")

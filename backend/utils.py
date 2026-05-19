@@ -5,6 +5,16 @@ from fastapi import UploadFile
 from database import fs
 
 
+async def upload_file_to_gridfs_bytes(data: bytes, filename: str, content_type: str) -> str:
+    """Upload raw bytes to GridFS and return the string file ID."""
+    file_id = await fs.upload_from_stream(
+        filename,
+        data,
+        metadata={"content_type": content_type},
+    )
+    return str(file_id)
+
+
 async def upload_file_to_gridfs(upload_file: UploadFile) -> Optional[str]:
     """
     Read UploadFile content and upload to GridFS.

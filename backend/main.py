@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 from routes_ai import router as ai_router
+from routes_applications import router as applications_router
+from routes_notifications import router as notifications_router
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +34,8 @@ app.add_middleware(
 app.include_router(users_router)
 app.include_router(job_offers_router)
 app.include_router(ai_router)
+app.include_router(applications_router)
+app.include_router(notifications_router)
 
 
 

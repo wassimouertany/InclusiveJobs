@@ -96,6 +96,9 @@ export default function RecruiterJobsPage() {
   const goToAiMatch = (offerId) => {
     navigate(`/dashboard/recruiter/matches?offer=${encodeURIComponent(offerId)}`);
   };
+  const goToApplications = (offerId) => {
+    navigate(`/dashboard/recruiter/applications?offer=${encodeURIComponent(offerId)}`);
+  };
   const goToCandidate = (candidateId) =>
     navigate(`/dashboard/recruiter/candidate/${encodeURIComponent(String(candidateId))}`);
 
@@ -832,6 +835,14 @@ export default function RecruiterJobsPage() {
                         onClick={() => goToAiMatch(job._id)}
                       >
                         <Sparkles size={16} /> AI Match
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="p-2 text-indigo-600 hover:bg-indigo-50 border-indigo-200 flex items-center gap-2 text-xs font-bold"
+                        onClick={() => goToApplications(job._id)}
+                      >
+                        <Users size={16} /> View Applications
                       </Button>
                       <Button variant="outline" className="p-2" disabled title="Edit soon">
                         <Edit size={18} />

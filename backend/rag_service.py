@@ -8,7 +8,7 @@ from bson import ObjectId
 
 
 EMBEDDINGS_MODEL = "models/gemini-embedding-001"
-LLM_MODEL = "gemini-2.5-flash"
+LLM_MODEL = "gemini-2.5-flash-lite"
 
 # Keep resume chunk within typical embedding input limits
 MAX_RESUME_TEXT_CHARS = 12000

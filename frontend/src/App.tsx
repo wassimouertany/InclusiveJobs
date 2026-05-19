@@ -22,6 +22,7 @@ import RecruiterMatchesPage from "./pages/recruiter/RecruiterMatchesPage";
 import RecruiterSearchPage from "./pages/recruiter/RecruiterSearchPage";
 import RecruiterProfilePage from "./pages/recruiter/RecruiterProfilePage";
 import RecruiterCandidateView from "./pages/recruiter/RecruiterCandidateView";
+import RecruiterApplicationsPage from "./pages/recruiter/RecruiterApplicationsPage";
 
 function LandingPage() {
   return (
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="matches" element={<RecruiterMatchesPage />} />
           <Route path="search" element={<RecruiterSearchPage />} />
           <Route path="profile" element={<RecruiterProfilePage />} />
+          <Route path="applications" element={<RecruiterApplicationsPage />} />
         </Route>
         <Route path="/dashboard/recruiter/candidate/:candidateId" element={<RecruiterCandidateView />} />
         <Route path="/dashboard/candidate" element={<CandidateLayout />}>
