@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, MapPin, Star, ChevronDown, Loader2, ChevronLeft, Building } from "lucide-react";
+import { Search, MapPin, Star, ChevronDown, Loader2, ChevronLeft, Building, Send } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiClient } from "../../services/apiClient";
 import JobCard from "../../components/JobCard";
@@ -289,6 +289,8 @@ export default function CandidateFindJobs() {
   const [locationQuery, setLocationQuery] = useState("");
   const [savedOfferIds, setSavedOfferIds] = useState<Set<string>>(() => new Set());
   const [publicSelectedJob, setPublicSelectedJob] = useState<JobOfferListItem | null>(null);
+  const [applyingToId, setApplyingToId] = useState<string | null>(null);
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(() => new Set());
 
   const [openContractSection, setOpenContractSection] = useState(true);
   const [openWorkSection, setOpenWorkSection] = useState(true);
@@ -328,6 +330,16 @@ export default function CandidateFindJobs() {
   useEffect(() => {
     loadOffers();
   }, [loadOffers]);
+
+  useEffect(() => {
+    if (!isCandidate) return;
+    apiClient
+      .get<{ offer_id: string }[]>("/applications/mine")
+      .then((res) => {
+        setAppliedIds(new Set(res.data.map((a) => a.offer_id)));
+      })
+      .catch(() => {});
+  }, [isCandidate]);
 
   const filteredJobs = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -400,18 +412,27 @@ export default function CandidateFindJobs() {
     });
   };
 
-  const handleApply = (e: MouseEvent) => {
-    e.stopPropagation();
+  const handleApply = async (offerId: string, offerTitle: string) => {
     if (isRecruiter) return;
     if (isGuest) {
       showToast("Please sign in or create an account to apply.", "info");
       navigate("/login");
       return;
     }
-    showToast(
-      "Application submitted — full apply flow coming soon.",
-      "success"
-    );
+    setApplyingToId(offerId);
+    try {
+      await apiClient.post("/applications/", { offer_id: offerId, cover_letter: "" });
+      setAppliedIds((prev) => new Set([...prev, offerId]));
+      showToast(`Successfully applied to ${offerTitle}!`, "success");
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        showToast("You have already applied to this offer", "info");
+      } else {
+        showToast("Failed to apply. Please try again.", "error");
+      }
+    } finally {
+      setApplyingToId(null);
+    }
   };
 
   const runSearchToast = () => {
@@ -638,13 +659,29 @@ export default function CandidateFindJobs() {
                   ) : null}
                 </div>
                 {!isRecruiter ? (
-                  <button
-                    type="button"
-                    onClick={(e) => handleApply(e)}
-                    className="shrink-0 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm active:scale-[0.98]"
-                  >
-                    Apply Now
-                  </button>
+                  appliedIds.has(publicSelectedJob._id) ? (
+                    <button
+                      disabled
+                      className="shrink-0 px-6 py-2.5 bg-green-100 text-green-700 text-sm font-semibold rounded-xl border border-green-200 flex items-center gap-2 cursor-default"
+                    >
+                      Applied ✓
+                    </button>
+                  ) : applyingToId === publicSelectedJob._id ? (
+                    <button
+                      disabled
+                      className="shrink-0 px-6 py-2.5 bg-indigo-400 text-white text-sm font-semibold rounded-xl flex items-center gap-2 cursor-not-allowed"
+                    >
+                      <Loader2 className="w-4 h-4 animate-spin" /> Applying…
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleApply(publicSelectedJob._id, publicSelectedJob.title)}
+                      className="shrink-0 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm active:scale-[0.98] flex items-center gap-2"
+                    >
+                      <Send className="w-4 h-4" /> Apply Now
+                    </button>
+                  )
                 ) : null}
               </div>
 
@@ -801,13 +838,27 @@ export default function CandidateFindJobs() {
                         <span className="shrink-0 px-6 py-2.5 bg-gray-100 text-gray-500 text-sm font-semibold rounded-lg border border-gray-200 w-full sm:w-auto text-center">
                           Recruiter View
                         </span>
+                      ) : appliedIds.has(job._id) ? (
+                        <button
+                          disabled
+                          className="shrink-0 px-6 py-2.5 bg-green-100 text-green-700 text-sm font-semibold rounded-xl border border-green-200 w-full sm:w-auto flex items-center justify-center gap-2 cursor-default"
+                        >
+                          Applied ✓
+                        </button>
+                      ) : applyingToId === job._id ? (
+                        <button
+                          disabled
+                          className="shrink-0 px-6 py-2.5 bg-indigo-400 text-white text-sm font-semibold rounded-xl w-full sm:w-auto flex items-center justify-center gap-2 cursor-not-allowed"
+                        >
+                          <Loader2 className="w-4 h-4 animate-spin" /> Applying…
+                        </button>
                       ) : (
                         <button
                           type="button"
-                          onClick={handleApply}
-                          className="shrink-0 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm active:scale-[0.98] w-full sm:w-auto"
+                          onClick={() => handleApply(job._id, job.title)}
+                          className="shrink-0 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm active:scale-[0.98] w-full sm:w-auto flex items-center justify-center gap-2"
                         >
-                          Apply Now
+                          <Send className="w-4 h-4" /> Apply Now
                         </button>
                       )
                     }

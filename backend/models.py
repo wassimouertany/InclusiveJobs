@@ -187,6 +187,7 @@ class JobOfferDB(BaseModel):
     profile_title: str = ""
     contract_type: ContractType
     key_skills: list[str] = Field(default_factory=list)
+    sector: str = ""
     working_conditions: str = ""
     possible_accommodations: str = ""
     saved_candidates: list[str] = Field(
@@ -199,6 +200,70 @@ class JobOfferDB(BaseModel):
     @classmethod
     def convert_objectid(cls, v):
         """Convert MongoDB ObjectId to str for id field."""
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+
+
+class ApplicationStatus(str, Enum):
+    SUBMITTED = "submitted"
+    UNDER_REVIEW = "under_review"
+    INTERVIEW_SCHEDULED = "interview_scheduled"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class NotificationType(str, Enum):
+    APPLICATION_RECEIVED = "application_received"
+    APPLICATION_STATUS_CHANGED = "application_status_changed"
+    INTERVIEW_SCHEDULED = "interview_scheduled"
+    NEW_AI_MATCH = "new_ai_match"
+
+
+class ApplicationDB(BaseModel):
+    """MongoDB document model for a job application."""
+
+    model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
+
+    id: Optional[str] = Field(default=None, alias="_id")
+    offer_id: str
+    candidate_id: str
+    recruiter_id: str
+    status: ApplicationStatus = ApplicationStatus.SUBMITTED
+    cover_letter: str = ""
+    interview_date: Optional[datetime] = None
+    interview_location: str = ""
+    interview_notes: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_objectid(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+
+
+class NotificationDB(BaseModel):
+    """MongoDB document model for a user notification."""
+
+    model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
+
+    id: Optional[str] = Field(default=None, alias="_id")
+    user_id: str
+    user_role: str
+    type: NotificationType
+    title: str
+    message: str
+    is_read: bool = False
+    related_offer_id: Optional[str] = None
+    related_application_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_objectid(cls, v):
         if isinstance(v, ObjectId):
             return str(v)
         return v

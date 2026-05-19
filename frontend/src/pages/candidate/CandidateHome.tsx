@@ -6,13 +6,27 @@ import {
   type MouseEvent,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, Info, Loader2, Sparkles } from "lucide-react";
+import {
+  Briefcase,
+  Calendar,
+  CheckCircle,
+  Clock,
+  Info,
+  Loader2,
+  Search,
+  Send,
+  Sparkles,
+  User,
+  XCircle,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import JobCard, { MatchScoreRing, matchTierLabel } from "../../components/JobCard";
 import RecommendationSkeleton from "../../components/RecommendationSkeleton";
-import { Button } from "../../components/UI";
 import { useToast } from "../../context/ToastContext";
 import { apiClient } from "../../services/apiClient";
 import { useCandidateDashboard } from "./CandidateDashboardContext";
+import { STATUS_CONFIG } from "../../types/application";
+import type { Application } from "../../types/application";
 import type {
   AiMatchesForCandidateResponse,
   JobOfferListItem,
@@ -26,6 +40,11 @@ import {
   splitAccommodations,
 } from "./shared";
 import { jobOfferCompanyLogoUrl } from "../../utils/jobOfferDisplay";
+import type { CandidateProfile } from "./types";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function readErrorDetailFromResponseLike(
   data: unknown,
@@ -54,22 +73,123 @@ const LOGO_BG = [
   "bg-indigo-600",
 ];
 
+const STATUS_ICON_MAP: Record<string, React.FC<{ size?: number; className?: string }>> = {
+  Clock,
+  Search,
+  Calendar,
+  CheckCircle,
+  XCircle,
+};
+
+const BADGE_COLOR: Record<string, string> = {
+  blue:   "bg-blue-100 text-blue-700",
+  yellow: "bg-yellow-100 text-yellow-700",
+  purple: "bg-purple-100 text-purple-700",
+  green:  "bg-green-100 text-green-700",
+  red:    "bg-red-100 text-red-700",
+};
+
+function computeProfileCompletion(profile: CandidateProfile | null): number {
+  if (!profile) return 0;
+  let score = 0;
+  if (profile.logo_id)                                            score += 20;
+  if (profile.resume_id)                                          score += 20;
+  if (normalizeToStringArray(profile.key_skills).length > 0)     score += 20;
+  if (profile.accessibility_needs?.trim())                        score += 20;
+  if (profile.profile_title?.trim())                              score += 20;
+  return score;
+}
+
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// ---------------------------------------------------------------------------
+// Profile completion ring
+// ---------------------------------------------------------------------------
+
+const RING_R = 28;
+const RING_CIRC = 2 * Math.PI * RING_R;
+
+function ProfileRing({ pct }: { pct: number }) {
+  return (
+    <svg
+      width="72" height="72" viewBox="0 0 72 72"
+      className="-rotate-90"
+      aria-hidden
+    >
+      <circle
+        cx="36" cy="36" r={RING_R}
+        fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="6"
+      />
+      <circle
+        cx="36" cy="36" r={RING_R}
+        fill="none" stroke="white" strokeWidth="6"
+        strokeLinecap="round"
+        strokeDasharray={RING_CIRC}
+        strokeDashoffset={RING_CIRC * (1 - pct / 100)}
+        style={{ transition: "stroke-dashoffset 0.7s ease" }}
+      />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Explore chips
+// ---------------------------------------------------------------------------
+
+const NEED_CHIPS = [
+  { label: "Wheelchair Access", emoji: "♿" },
+  { label: "Visual Aid",        emoji: "👁" },
+  { label: "Hearing Aid",       emoji: "🎧" },
+  { label: "Neurodiverse Friendly", emoji: "🧠" },
+  { label: "Fully Remote",      emoji: "🏠" },
+  { label: "Flexible Hours",    emoji: "⏰" },
+];
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function CandidateHome() {
   const { showToast } = useToast();
   const { displayName, setSelectedJob, profile } = useCandidateDashboard();
+  const navigate = useNavigate();
+
+  // AI matches state (existing)
   const [matches, setMatches] = useState<
     AiMatchesForCandidateResponse["matches"] | null
   >(null);
   const [loading, setLoading] = useState(false);
-  const [offersById, setOffersById] = useState<
-    Record<string, JobOfferListItem>
-  >({});
+  const [offersById, setOffersById] = useState<Record<string, JobOfferListItem>>({});
+
+  // Applications state (new)
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [appsLoading, setAppsLoading] = useState(true);
+
+  const profileCompletion = useMemo(() => computeProfileCompletion(profile), [profile]);
+  const firstName = profile?.first_name?.trim() || displayName;
 
   const candidateSkillList = useMemo(
     () => normalizeToStringArray(profile?.key_skills),
     [profile?.key_skills]
   );
 
+  // Fetch applications once on mount
+  useEffect(() => {
+    apiClient
+      .get<Application[]>("/applications/mine")
+      .then((res) => {
+        const sorted = [...res.data].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        setApplications(sorted);
+      })
+      .catch(() => {})
+      .finally(() => setAppsLoading(false));
+  }, []);
+
+  // Fetch AI matches (existing)
   const fetchAiMatches = useCallback(async () => {
     setLoading(true);
     try {
@@ -92,6 +212,7 @@ export default function CandidateHome() {
     }
   }, [showToast]);
 
+  // Load offer details for match cards (existing)
   useEffect(() => {
     if (!matches?.length) {
       setOffersById({});
@@ -102,27 +223,21 @@ export default function CandidateHome() {
       const res = await apiClient.get<JobOfferListItem[]>("/job-offers/", {
         validateStatus: () => true,
       });
-      if (cancelled || res.status < 200 || res.status >= 300 || !Array.isArray(res.data)) {
-        return;
-      }
+      if (cancelled || res.status < 200 || res.status >= 300 || !Array.isArray(res.data)) return;
       const map: Record<string, JobOfferListItem> = {};
-      for (const o of res.data) {
-        map[o._id] = o;
-      }
+      for (const o of res.data) map[o._id] = o;
       setOffersById(map);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [matches]);
 
   const handleApply = (e: MouseEvent) => {
     e.stopPropagation();
-    showToast(
-      "Application submitted — full apply flow coming soon.",
-      "success"
-    );
+    showToast("Application submitted — full apply flow coming soon.", "success");
   };
+
+  const aiMatchCount = matches?.length ?? 0;
+  const recentApps = applications.slice(0, 3);
 
   return (
     <motion.div
@@ -131,52 +246,122 @@ export default function CandidateHome() {
       transition={{ duration: 0.2 }}
       className="space-y-6"
     >
-      <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
-        <h2 className="text-2xl font-bold text-gray-900">
-          Welcome{displayName ? `, ${displayName}` : ""}
-        </h2>
-        <p className="text-gray-500 mt-2">
-          Your candidate dashboard — get AI recommendations here, or browse every
-          open role under Find Jobs.
-        </p>
-      </div>
-
-      <div className="bg-primary/10 border border-primary/20 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-start gap-4">
-        <div className="bg-primary text-white p-3 rounded-xl shrink-0">
-          <Bell size={24} />
-        </div>
+      {/* ------------------------------------------------------------------ */}
+      {/* 1. WELCOME BANNER                                                    */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="bg-linear-to-r from-indigo-600 to-teal-500 rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-6">
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-bold text-gray-900">AI job matches</h3>
-          <p className="text-gray-500 mt-1">
-            Get personalized recommendations based on your profile and accessibility
-            needs. Results include a compatibility score and a short explanation.
+          <h2 className="text-2xl font-bold text-white">
+            Welcome back, {firstName} 👋
+          </h2>
+          <p className="text-white/75 mt-1 text-sm">
+            Here's what's waiting for you today.
           </p>
-          <Button
-            className="mt-4 text-sm gap-2"
-            onClick={fetchAiMatches}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="animate-spin" size={18} />
-            ) : (
-              <Sparkles size={18} />
+        </div>
+
+        {/* Progress ring */}
+        <div className="flex items-center gap-4 sm:flex-col sm:items-center sm:text-center shrink-0">
+          <div className="relative">
+            <ProfileRing pct={profileCompletion} />
+            <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">
+              {profileCompletion}%
+            </span>
+          </div>
+          <div>
+            <p className="text-white/80 text-xs font-medium whitespace-nowrap">
+              Profile {profileCompletion}% complete
+            </p>
+            {profileCompletion < 100 && (
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard/candidate/profile")}
+                className="mt-1.5 text-xs font-semibold bg-white/20 hover:bg-white/30 text-white rounded-full px-3 py-1 transition-colors whitespace-nowrap"
+              >
+                Complete Profile
+              </button>
             )}
-            Get AI Recommendations
-          </Button>
+          </div>
         </div>
       </div>
 
+      {/* ------------------------------------------------------------------ */}
+      {/* 2. QUICK STATS ROW                                                   */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          {
+            label: "Applications Sent",
+            value: appsLoading ? "—" : applications.length,
+            Icon: Send,
+            iconBg: "bg-indigo-50",
+            iconColor: "text-indigo-600",
+          },
+          {
+            label: "AI Matches Found",
+            value: aiMatchCount,
+            Icon: Sparkles,
+            iconBg: "bg-purple-50",
+            iconColor: "text-purple-600",
+          },
+          {
+            label: "Profile Strength",
+            value: `${profileCompletion}%`,
+            Icon: User,
+            iconBg: "bg-teal-50",
+            iconColor: "text-teal-600",
+          },
+          {
+            label: "Available Offers",
+            value: "1,200+",
+            Icon: Briefcase,
+            iconBg: "bg-amber-50",
+            iconColor: "text-amber-600",
+          },
+        ].map(({ label, value, Icon, iconBg, iconColor }) => (
+          <div
+            key={label}
+            className="bg-white rounded-2xl p-5 border border-indigo-50 shadow-sm"
+          >
+            <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center mb-3`}>
+              <Icon className={`w-5 h-5 ${iconColor}`} />
+            </div>
+            <div className="text-2xl font-bold text-text-primary">{value}</div>
+            <div className="text-xs text-text-secondary mt-0.5">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* 3. EXPLORE BY NEED                                                   */}
+      {/* ------------------------------------------------------------------ */}
+      <div>
+        <p className="text-lg font-semibold text-text-primary mb-3">
+          Find jobs that fit your needs
+        </p>
+        <div className="overflow-x-auto pb-2">
+          <div className="flex gap-3" style={{ width: "max-content" }}>
+            {NEED_CHIPS.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => navigate("/dashboard/candidate/find-jobs")}
+                className="inline-flex items-center gap-2 bg-white border-2 border-indigo-100 hover:border-primary hover:bg-indigo-50 rounded-full px-4 py-2 text-sm font-medium text-text-primary cursor-pointer transition-all whitespace-nowrap"
+              >
+                <span>{chip.emoji}</span>
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* 4. AI MATCHES SECTION                                                */}
+      {/* ------------------------------------------------------------------ */}
       <div>
         <h3 className="text-xl font-bold text-gray-900 mb-4">
           Recommended for you
         </h3>
-
-        {matches === null && !loading && (
-          <p className="text-sm text-gray-500">
-            Click &quot;Get AI Recommendations&quot; above to load matches from the AI
-            service.
-          </p>
-        )}
 
         <AnimatePresence mode="wait">
           {loading ? (
@@ -209,9 +394,7 @@ export default function CandidateHome() {
                 const logoLetter = (companyLine || title || "?")
                   .charAt(0)
                   .toUpperCase();
-                const companyLogoUrl = jobOfferCompanyLogoUrl(
-                  offer?.company_logo_id
-                );
+                const companyLogoUrl = jobOfferCompanyLogoUrl(offer?.company_logo_id);
                 const recruiterLocation =
                   offer?.recruiter_location?.trim() || "Location not specified";
                 const workingConditions = offer?.working_conditions?.trim();
@@ -224,9 +407,7 @@ export default function CandidateHome() {
                 const roleDesc =
                   offer?.description?.trim() ||
                   "No detailed description loaded for this role yet.";
-                const amenities = splitAccommodations(
-                  offer?.possible_accommodations
-                );
+                const amenities = splitAccommodations(offer?.possible_accommodations);
                 const score = Math.round(
                   typeof m.ai_score === "number"
                     ? m.ai_score
@@ -250,8 +431,7 @@ export default function CandidateHome() {
                       title={title}
                       company={companyLine}
                       roleHeadline={
-                        offer?.company_name?.trim() &&
-                        offer?.profile_title?.trim()
+                        offer?.company_name?.trim() && offer?.profile_title?.trim()
                           ? offer.profile_title.trim()
                           : undefined
                       }
@@ -267,10 +447,7 @@ export default function CandidateHome() {
                       roleDescription={roleDesc}
                       amenities={amenities}
                       scoreSlot={
-                        <MatchScoreRing
-                          score={score}
-                          label={matchTierLabel(score)}
-                        />
+                        <MatchScoreRing score={score} label={matchTierLabel(score)} />
                       }
                       aiInsightSlot={
                         <div className="space-y-4">
@@ -316,9 +493,7 @@ export default function CandidateHome() {
                       detailsSlot={
                         <button
                           type="button"
-                          onClick={() =>
-                            setSelectedJob(selectedJobFromAiMatch(m, offer))
-                          }
+                          onClick={() => setSelectedJob(selectedJobFromAiMatch(m, offer))}
                           className="shrink-0 px-5 py-2.5 border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 text-sm font-semibold rounded-lg transition-colors w-full sm:w-auto"
                         >
                           Details
@@ -338,14 +513,117 @@ export default function CandidateHome() {
                 );
               })}
             </motion.div>
-          ) : null}
+          ) : (
+            /* Empty / not-yet-run state */
+            <motion.div
+              key="recommendation-empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="bg-linear-to-br from-indigo-50 to-teal-50 rounded-3xl p-10 border border-indigo-100 text-center">
+                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                  <Sparkles className="w-10 h-10 text-primary" />
+                </div>
+                <h4 className="font-display text-2xl font-bold text-text-primary mb-2">
+                  Discover Your Perfect Match
+                </h4>
+                <p className="text-text-secondary text-sm max-w-sm mx-auto mb-6 leading-relaxed">
+                  Our AI analyzes your profile, disability type, and accessibility needs
+                  to find roles where you'll truly thrive.
+                </p>
+                <button
+                  type="button"
+                  onClick={fetchAiMatches}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 bg-linear-to-r from-primary to-primary-light text-white rounded-2xl px-8 py-3 font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
+                >
+                  {loading ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <Sparkles size={18} />
+                  )}
+                  Get AI Recommendations
+                </button>
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
+      </div>
 
-        {!loading && matches !== null && matches.length === 0 && (
-          <p className="text-sm text-gray-500">
-            No matches returned. Try again later or browse all open roles under Find
-            Jobs.
-          </p>
+      {/* ------------------------------------------------------------------ */}
+      {/* 5. RECENT APPLICATIONS                                               */}
+      {/* ------------------------------------------------------------------ */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xl font-bold text-gray-900">Recent Applications</h3>
+          {applications.length > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate("/dashboard/candidate/applications")}
+              className="text-sm text-primary font-medium hover:underline"
+            >
+              View all →
+            </button>
+          )}
+        </div>
+
+        {appsLoading ? (
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse">
+                <div className="flex items-center gap-4">
+                  <div className="h-4 bg-gray-200 rounded w-1/3" />
+                  <div className="h-4 bg-gray-100 rounded w-1/4" />
+                  <div className="ml-auto h-6 w-24 bg-gray-200 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : recentApps.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+            <Send size={28} className="text-gray-300 mx-auto mb-2" />
+            <p className="text-sm text-gray-400 mb-3">No applications yet</p>
+            <button
+              type="button"
+              onClick={() => navigate("/dashboard/candidate/find-jobs")}
+              className="text-sm text-primary font-semibold hover:underline"
+            >
+              Browse Jobs
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {recentApps.map((app) => {
+              const cfg = STATUS_CONFIG[app.status];
+              const StatusIcon = STATUS_ICON_MAP[cfg.icon];
+              return (
+                <div
+                  key={app._id}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center gap-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm truncate">
+                      {app.offer_title || "Job Offer"}
+                    </p>
+                    {app.company_name && (
+                      <p className="text-xs text-gray-500 mt-0.5">{app.company_name}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs text-gray-400">{shortDate(app.created_at)}</span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${BADGE_COLOR[cfg.color]}`}
+                    >
+                      {StatusIcon && <StatusIcon size={12} />}
+                      {cfg.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </motion.div>

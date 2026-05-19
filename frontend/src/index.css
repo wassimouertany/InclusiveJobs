@@ -1,16 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;0,800;1,700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Inter', sans-serif;
-  --color-primary: #4F46E5;
-  --color-primary-light: #6366F1;
-  --color-primary-dark: #4338CA;
-  --color-bg-page: #F3F4F6;
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-display: 'Playfair Display', serif;
+  --color-primary: #0D9488;
+  --color-primary-light: #14B8A6;
+  --color-primary-dark: #0F766E;
+  --color-accent: #F97316;
+  --color-bg-page: #F8FAFC;
   --color-bg-card: #FFFFFF;
-  --color-text-primary: #111827;
-  --color-text-secondary: #6B7280;
-  --color-border: #E5E7EB;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #64748B;
+  --color-border: #E2E8F0;
   --color-accent-blue: #3B82F6;
   --color-success-green: #10B981;
 }
@@ -21,13 +23,34 @@ body {
   color: var(--color-text-primary);
 }
 
+.gradient-text {
+  background: linear-gradient(135deg, #14B8A6 0%, #5EEAD4 60%, #99F6E4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.card-hover {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(13, 148, 136, 0.12);
+}
+
+.mesh-bg {
+  background-color: #0C1A2E;
+  background-image:
+    radial-gradient(at 20% 25%, rgba(13, 148, 136, 0.30) 0px, transparent 55%),
+    radial-gradient(at 80% 15%, rgba(20, 184, 166, 0.25) 0px, transparent 50%),
+    radial-gradient(at 55% 85%, rgba(249, 115, 22, 0.12) 0px, transparent 50%),
+    radial-gradient(at 90% 65%, rgba(99, 102, 241, 0.18) 0px, transparent 50%),
+    radial-gradient(at 5%  75%, rgba(20, 184, 166, 0.15) 0px, transparent 50%);
+}
+
 @keyframes recommendation-shimmer {
-  0% {
-    transform: translateX(-120%) skewX(-12deg);
-  }
-  100% {
-    transform: translateX(220%) skewX(-12deg);
-  }
+  0%   { transform: translateX(-120%) skewX(-12deg); }
+  100% { transform: translateX(220%)  skewX(-12deg); }
 }
 
 .recommendation-shimmer-mask {

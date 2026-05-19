@@ -9,7 +9,7 @@ type NavItem = {
 };
 
 const ITEMS: NavItem[] = [
-  { to: "/dashboard/candidate/home", label: "Dashboard", icon: Bell },
+  { to: "/dashboard/candidate/home", label: "My Space", icon: Bell },
   { to: "/dashboard/candidate/profile", label: "My Profile", icon: User },
   { to: "/dashboard/candidate/find-jobs", label: "Find Jobs", icon: Search },
   { to: "/dashboard/candidate/applications", label: "Applications", icon: FileText },

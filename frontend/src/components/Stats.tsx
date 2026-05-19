@@ -2,10 +2,10 @@ import { Building2, Users, Handshake, CheckCircle2 } from 'lucide-react';
 import { useNavigation } from '../context/NavigationContext';
 
 const stats = [
-  { label: 'Job Offers', value: '1,200+', icon: Building2, action: 'find-jobs' },
-  { label: 'Candidates', value: '8,500+', icon: Users, action: 'employers' },
-  { label: 'Recruiters', value: '340+', icon: Handshake, action: 'employers' },
-  { label: 'Match Accuracy', value: '92%', icon: CheckCircle2, action: 'landing' },
+  { label: 'Job Offers',      value: '1,200+', icon: Building2,   action: 'find-jobs', iconBg: 'bg-teal-50',   iconColor: 'text-teal-600'   },
+  { label: 'Candidates',      value: '8,500+', icon: Users,        action: 'employers', iconBg: 'bg-indigo-50', iconColor: 'text-indigo-600' },
+  { label: 'Recruiters',      value: '340+',   icon: Handshake,    action: 'employers', iconBg: 'bg-orange-50', iconColor: 'text-orange-500' },
+  { label: 'Match Accuracy',  value: '92%',    icon: CheckCircle2, action: 'landing',   iconBg: 'bg-green-50',  iconColor: 'text-green-600'  },
 ];
 
 export default function Stats() {
@@ -14,17 +14,17 @@ export default function Stats() {
   return (
     <section className="bg-white border-y border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-100">
+        <div className="grid grid-cols-2 md:grid-cols-4">
           {stats.map((stat, index) => (
-            <div 
-              key={index} 
+            <div
+              key={index}
               onClick={() => navigate(stat.action as any)}
-              className="py-8 px-4 text-center group hover:bg-gray-50 transition-colors cursor-pointer"
+              className="py-10 px-6 text-center group card-hover cursor-pointer border-r border-gray-100 last:border-r-0"
             >
-              <div className="flex justify-center mb-3">
-                <stat.icon className="w-6 h-6 text-primary/40 group-hover:text-primary transition-colors" />
+              <div className={`w-12 h-12 rounded-2xl ${stat.iconBg} flex items-center justify-center mx-auto mb-4`}>
+                <stat.icon className={`w-6 h-6 ${stat.iconColor}`} />
               </div>
-              <div className="text-3xl sm:text-4xl font-bold text-primary mb-1 tracking-tight">
+              <div className="font-display text-3xl sm:text-4xl font-bold text-text-primary mb-1 tracking-tight group-hover:text-primary transition-colors">
                 {stat.value}
               </div>
               <div className="text-sm font-medium text-text-secondary uppercase tracking-wider">

@@ -82,3 +82,8 @@ async def get_current_candidate(current_user: dict = Depends(get_current_user)) 
     if current_user.get("role") != "CANDIDATE":
         raise HTTPException(status_code=403, detail="Access denied. Candidate privileges required.")
     return current_user
+
+
+async def get_current_user_any_role(current_user: dict = Depends(get_current_user)) -> dict:
+    """Accept any authenticated user regardless of role."""
+    return current_user
