@@ -204,7 +204,13 @@ export default function CandidateHome() {
         );
         return;
       }
-      setMatches(res.data.matches ?? []);
+      const fetched = res.data.matches ?? [];
+      setMatches(fetched);
+      if (fetched.some((m: { ai_score?: number; vector_score?: number }) =>
+        (typeof m.ai_score === "number" ? m.ai_score : (m.vector_score ?? 0)) >= 90
+      )) {
+        apiClient.post("/badges/award/highly_matched").catch(() => {});
+      }
     } catch {
       showToast("Could not load AI recommendations. Is the API running?", "error");
     } finally {

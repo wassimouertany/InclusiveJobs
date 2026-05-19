@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
-import { Briefcase, Building, FileText, Search, Star } from "lucide-react";
+import { Briefcase, Building, FileText, Search, Star, Users } from "lucide-react";
 import { apiClient } from "../../services/apiClient";
 
 const navInactive = "text-gray-600 hover:bg-gray-50";
@@ -108,6 +108,9 @@ export default function RecruiterLayout() {
                 </NavLink>
                 <NavLink to="/dashboard/recruiter/applications" className={navClass}>
                   <FileText className="w-5 h-5 mr-3" /> Applications
+                </NavLink>
+                <NavLink to="/community" className={navClass}>
+                  <Users className="w-5 h-5 mr-3" /> Community
                 </NavLink>
                 <NavLink to="/dashboard/recruiter/profile" className={navClass}>
                   <Building className="w-5 h-5 mr-3" /> Company Profile

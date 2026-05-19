@@ -23,6 +23,8 @@ import RecruiterSearchPage from "./pages/recruiter/RecruiterSearchPage";
 import RecruiterProfilePage from "./pages/recruiter/RecruiterProfilePage";
 import RecruiterCandidateView from "./pages/recruiter/RecruiterCandidateView";
 import RecruiterApplicationsPage from "./pages/recruiter/RecruiterApplicationsPage";
+import CommunityPage from "./pages/community/CommunityPage";
+import CompanyDetailPage from "./pages/community/CompanyDetailPage";
 
 function LandingPage() {
   return (
@@ -42,7 +44,7 @@ function AppShell({ children }: { children: ReactNode }) {
       <Navbar />
       {/* Avoid AnimatePresence + motion around <Routes>: it re-renders Routes with the
           new URL during exit and can leave the main area blank (e.g. /dashboard/recruiter). */}
-      <main className="flex-grow relative">{children}</main>
+      <main className="grow relative">{children}</main>
       <Footer />
       <AccessibilityWidget />
     </div>
@@ -55,6 +57,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/community" element={<CommunityPage />} />
+        <Route path="/community/company/:recruiterId" element={<CompanyDetailPage />} />
         <Route path="/find-jobs" element={<CandidateFindJobs />} />
         <Route path="/employers" element={<ForEmployers />} />
         <Route path="/dashboard" element={<Dashboard />} />

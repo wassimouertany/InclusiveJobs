@@ -642,6 +642,110 @@ async def get_my_recruiter_logo(current_user: dict = Depends(get_current_recruit
     return Response(content=data, media_type=media_type)
 
 
+@router.get("/recruiters/{recruiter_id}/logo")
+async def get_recruiter_logo_public(recruiter_id: str):
+    """Public recruiter logo stream — no auth required."""
+    if not ObjectId.is_valid(recruiter_id):
+        raise HTTPException(status_code=400, detail="Invalid recruiter ID.")
+
+    recruiter = await db.recruiters.find_one(
+        {"_id": ObjectId(recruiter_id)}, {"logo_id": 1}
+    )
+    if not recruiter:
+        raise HTTPException(status_code=404, detail="Recruiter not found.")
+
+    logo_id = recruiter.get("logo_id")
+    if not logo_id or not ObjectId.is_valid(str(logo_id)):
+        raise HTTPException(status_code=404, detail="No logo.")
+
+    try:
+        grid_out = await fs.open_download_stream(ObjectId(str(logo_id)))
+    except NoFile:
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    data = await grid_out.read()
+    media_type = grid_out.content_type or "image/jpeg"
+    return Response(content=data, media_type=media_type)
+
+
+# ---------------------------------------------------------------------------
+# Recruiter public profile helpers
+# ---------------------------------------------------------------------------
+
+def _compute_inclusion_score(recruiter: dict, total_offers: int, total_hires: int) -> int:
+    base = 0
+    if recruiter.get("employees_with_disability", 0) > 0:
+        base += 30
+    strategy = recruiter.get("inclusion_strategy", "")
+    if strategy and len(strategy) > 50:
+        base += 20
+    if total_hires >= 1:
+        base += 20
+    if total_hires >= 5:
+        base += 15
+    if total_offers >= 3:
+        base += 15
+    return min(base, 100)
+
+
+def _inclusion_level(score: int) -> str:
+    if score >= 85:
+        return "Champion"
+    if score >= 65:
+        return "Gold"
+    if score >= 40:
+        return "Silver"
+    return "Bronze"
+
+
+async def _build_recruiter_public(recruiter: dict) -> dict:
+    rid = str(recruiter["_id"])
+    total_offers = await db.job_offers.count_documents({"recruiter_id": rid, "status": "open"})
+    total_hires = await db.applications.count_documents({"recruiter_id": rid, "status": "accepted"})
+    score = _compute_inclusion_score(recruiter, total_offers, total_hires)
+    return {
+        "_id": rid,
+        "company_name": recruiter.get("company_name", ""),
+        "company_industry": recruiter.get("company_industry", ""),
+        "location": recruiter.get("location", ""),
+        "employee_count": recruiter.get("employee_count", 0),
+        "employees_with_disability": recruiter.get("employees_with_disability", 0),
+        "inclusion_strategy": recruiter.get("inclusion_strategy", ""),
+        "logo_id": recruiter.get("logo_id"),
+        "founded_year": recruiter.get("founded_year", 0),
+        "created_at": recruiter.get("created_at"),
+        "total_offers": total_offers,
+        "total_hires": total_hires,
+        "inclusion_score": score,
+        "inclusion_level": _inclusion_level(score),
+    }
+
+
+@router.get("/recruiters/public/")
+async def list_recruiters_public():
+    """Public leaderboard — all recruiters ranked by inclusion_score desc, limit 20."""
+    cursor = db.recruiters.find()
+    recruiters = await cursor.to_list(length=500)
+    results = []
+    for r in recruiters:
+        results.append(await _build_recruiter_public(r))
+    results.sort(key=lambda x: x["inclusion_score"], reverse=True)
+    return {"recruiters": results[:20]}
+
+
+@router.get("/recruiters/public/{recruiter_id}")
+async def get_recruiter_public(recruiter_id: str):
+    """Public recruiter profile with inclusion stats. No auth required."""
+    if not ObjectId.is_valid(recruiter_id):
+        raise HTTPException(status_code=400, detail="Invalid recruiter ID.")
+
+    recruiter = await db.recruiters.find_one({"_id": ObjectId(recruiter_id)})
+    if not recruiter:
+        raise HTTPException(status_code=404, detail="Recruiter not found.")
+
+    return await _build_recruiter_public(recruiter)
+
+
 @router.get("/candidates/{candidate_id}")
 async def get_candidate_by_id(candidate_id: str):
     """Public candidate profile endpoint for recruiter viewing."""

@@ -18,6 +18,7 @@ import { useToast } from "../../context/ToastContext";
 import { apiClient } from "../../services/apiClient";
 import { API_BASE_URL } from "../../config/api";
 import { formatEnumLabel, initials, normalizeToStringArray } from "./shared";
+import CandidateBadges from "./CandidateBadges";
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -237,6 +238,18 @@ export default function CandidateProfile() {
       setResumeFile(null);
       setDisabilityCardFile(null);
       showToast("Profile updated successfully!", "success");
+      const profileComplete =
+        !!(profile?.logo_id || photoFile) &&
+        !!(profile?.resume_id || resumeFile) &&
+        form.key_skills.length > 0 &&
+        !!form.accessibility_needs.trim() &&
+        !!form.profile_title.trim();
+      if (profileComplete) {
+        apiClient.post("/badges/award/profile_complete").catch(() => {});
+      }
+      if (resumeFile) {
+        apiClient.post("/badges/award/cv_champion").catch(() => {});
+      }
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -360,6 +373,13 @@ export default function CandidateProfile() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ================================================================ */}
+      {/* ACHIEVEMENTS                                                     */}
+      {/* ================================================================ */}
+      <div className="bg-white rounded-3xl p-6 border border-teal-50 shadow-sm">
+        <CandidateBadges />
       </div>
 
       {/* ================================================================ */}

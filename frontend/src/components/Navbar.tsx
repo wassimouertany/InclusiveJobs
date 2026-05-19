@@ -50,16 +50,19 @@ export default function Navbar() {
     { id: "landing", label: "Home" },
     { id: "find-jobs", label: "Find Jobs" },
     { id: "employers", label: "For Employers" },
+    { id: "community", label: "Community" },
   ];
 
   const candidateNavLinks: { id: Page; label: string }[] = [
     { id: "landing", label: "Home" },
     { id: "dashboard-candidate-find-jobs", label: "Find Jobs" },
+    { id: "community", label: "Community" },
     { id: "dashboard-candidate-home", label: "My Dashboard" },
   ];
   const recruiterNavLinks: { id: Page; label: string }[] = [
     { id: "landing", label: "Home" },
     { id: "find-jobs", label: "Find Jobs" },
+    { id: "community", label: "Community" },
     { id: "dashboard-recruiter", label: "My Dashboard" },
   ];
 

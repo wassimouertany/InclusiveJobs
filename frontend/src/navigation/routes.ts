@@ -5,6 +5,7 @@ export const PATH_BY_PAGE: Record<Page, string> = {
   login: "/login",
   "find-jobs": "/find-jobs",
   employers: "/employers",
+  community: "/community",
   dashboard: "/dashboard",
   "dashboard-recruiter": "/dashboard/recruiter/jobs",
   "dashboard-candidate-home": "/dashboard/candidate/home",
@@ -39,6 +40,7 @@ export function pathToPage(pathname: string): Page {
   if (p === "/login") return "login";
   if (p === "/find-jobs") return "find-jobs";
   if (p === "/employers") return "employers";
+  if (p.startsWith("/community")) return "community";
   if (p === "/") return "landing";
   return "landing";
 }
