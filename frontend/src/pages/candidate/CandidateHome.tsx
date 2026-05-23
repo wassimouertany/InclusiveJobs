@@ -7,11 +7,12 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  AlertTriangle,
   Briefcase,
   Calendar,
   CheckCircle,
+  CheckCircle2,
   Clock,
-  Info,
   Loader2,
   Search,
   Send,
@@ -204,7 +205,13 @@ export default function CandidateHome() {
         );
         return;
       }
-      setMatches(res.data.matches ?? []);
+      const fetched = res.data.matches ?? [];
+      setMatches(fetched);
+      if (fetched.some((m: { ai_score?: number; vector_score?: number }) =>
+        (typeof m.ai_score === "number" ? m.ai_score : (m.vector_score ?? 0)) >= 90
+      )) {
+        apiClient.post("/badges/award/highly_matched").catch(() => {});
+      }
     } catch {
       showToast("Could not load AI recommendations. Is the API running?", "error");
     } finally {
@@ -450,44 +457,51 @@ export default function CandidateHome() {
                         <MatchScoreRing score={score} label={matchTierLabel(score)} />
                       }
                       aiInsightSlot={
-                        <div className="space-y-4">
-                          <div className="rounded-xl border border-indigo-100/90 bg-indigo-50/35 backdrop-blur-md p-4 shadow-sm">
-                            <h4 className="font-bold text-sm text-indigo-950 mb-2">
-                              Why you matched
-                            </h4>
-                            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
-                              {m.explanation?.trim() || "—"}
-                            </p>
-                          </div>
-                          {m.strengths && m.strengths.length > 0 ? (
-                            <div className="rounded-xl border border-indigo-200/70 bg-gradient-to-br from-indigo-50/90 to-violet-50/40 backdrop-blur-md p-4 shadow-sm ring-1 ring-indigo-100/50">
-                              <div className="flex gap-3 items-start">
-                                <Info
-                                  className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5"
-                                  strokeWidth={2}
-                                  aria-hidden
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-950">
-                                    Pro Insight
-                                  </p>
-                                  <p className="text-xs text-indigo-900/85 mt-1 mb-3">
-                                    Strengths the model highlighted for this match
-                                  </p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {m.strengths.map((s) => (
-                                      <span
-                                        key={s}
-                                        className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-white/60 border border-indigo-200/70 text-indigo-950 backdrop-blur-sm shadow-sm"
-                                      >
-                                        {s}
-                                      </span>
-                                    ))}
-                                  </div>
+                        <div className="space-y-3">
+                          <div className="relative rounded-2xl bg-linear-to-br from-indigo-600 to-purple-700 p-5 text-white overflow-hidden">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                            <div className="relative z-10">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">
+                                  <Sparkles className="w-3.5 h-3.5 text-white" />
                                 </div>
+                                <h4 className="font-bold text-sm text-white">Why you matched</h4>
                               </div>
+                              <p className="text-sm text-white/85 leading-relaxed whitespace-pre-wrap">
+                                {m.explanation?.trim() || "—"}
+                              </p>
                             </div>
-                          ) : null}
+                          </div>
+                          {m.strengths && m.strengths.length > 0 && (
+                            <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4">
+                              <h4 className="font-bold text-xs uppercase tracking-widest text-emerald-600 mb-3 flex items-center gap-2">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Your strengths
+                              </h4>
+                              <ul className="space-y-2">
+                                {m.strengths.map((s: string, i: number) => (
+                                  <li key={i} className="flex items-start gap-2.5 text-sm text-emerald-900">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 shrink-0" />
+                                    {s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {m.concerns && m.concerns.length > 0 && (
+                            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
+                              <h4 className="font-bold text-xs uppercase tracking-widest text-amber-600 mb-3 flex items-center gap-2">
+                                <AlertTriangle className="w-3.5 h-3.5" /> Points to consider
+                              </h4>
+                              <ul className="space-y-2">
+                                {m.concerns.map((c: string, i: number) => (
+                                  <li key={i} className="flex items-start gap-2.5 text-sm text-amber-900">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
+                                    {c}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       }
                       detailsSlot={

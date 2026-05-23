@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Building2, MapPin, Clock, CheckCircle2 } from "lucide-react";
+import { Building2, MapPin, Clock, CheckCircle2, FileText, Shield, Briefcase } from "lucide-react";
 import { motion, animate } from "motion/react";
 import SkillBadges from "./SkillBadges";
 import { hasMeaningfulHtmlText } from "../pages/candidate/shared";
@@ -109,17 +109,19 @@ function CardLogo({
   logoUrl,
   letter,
   fallbackClassName,
+  containerClassName = "h-14 w-14 rounded-xl shadow-sm ring-1 ring-gray-200/60",
 }: {
   logoUrl?: string | null;
   letter: string;
   fallbackClassName: string;
+  containerClassName?: string;
 }) {
   const [failed, setFailed] = useState(false);
   const showImg = Boolean(logoUrl && !failed);
 
   return (
     <div
-      className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-gray-200/60 ${
+      className={`relative shrink-0 overflow-hidden ${containerClassName} ${
         showImg ? "bg-white" : fallbackClassName
       }`}
     >
@@ -201,7 +203,7 @@ export default function JobCard({
   const shell =
     variant === "guest"
       ? "bg-white rounded-2xl p-6 border border-border shadow-sm hover:shadow-md transition-shadow"
-      : "bg-white rounded-xl p-6 border border-indigo-200/90 shadow-sm hover:shadow-md transition-shadow";
+      : "relative bg-white rounded-3xl border-0 shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group";
 
   return (
     <motion.article
@@ -214,122 +216,238 @@ export default function JobCard({
       }
       className={shell}
     >
-      <div className="flex gap-4">
-        <CardLogo
-          logoUrl={companyLogoUrl}
-          letter={logoLetter}
-          fallbackClassName={logoClassName}
-        />
+      {variant === "candidate" && (
+        <>
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-linear-to-b from-indigo-500 to-purple-600 rounded-l-3xl" />
+          <div className="absolute inset-0 bg-linear-to-br from-indigo-50/30 via-transparent to-purple-50/20 pointer-events-none rounded-3xl" />
+        </>
+      )}
 
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div className="min-w-0">
-              <h3
-                className={
-                  variant === "guest"
-                    ? "text-lg font-bold text-text-primary"
-                    : "text-lg font-bold text-indigo-900 leading-snug"
-                }
-              >
-                {title}
-              </h3>
-              {roleHeadline ? (
-                <p className="text-sm font-medium text-indigo-800/85 mt-1 leading-snug">
-                  {roleHeadline}
-                </p>
-              ) : null}
-              <div className="flex flex-wrap items-center text-sm text-gray-500 mt-1.5 gap-x-4 gap-y-1">
-                <span className="flex items-center gap-1">
-                  <Building2 className="w-3.5 h-3.5 shrink-0" />
-                  {company}
-                </span>
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 shrink-0" />
-                  {recruiterLocation}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 shrink-0" />
-                  {posted}
-                </span>
-              </div>
-              {workingConditions?.trim() ? (
-                <div className="mt-3 rounded-lg border border-gray-100 bg-slate-50/80 px-3 py-2.5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
-                    Work arrangement
+      <div className={variant === "candidate" ? "relative z-10 p-6 pl-8" : ""}>
+        <div className="flex gap-4">
+          <CardLogo
+            logoUrl={companyLogoUrl}
+            letter={logoLetter}
+            fallbackClassName={logoClassName}
+            containerClassName={
+              variant === "candidate"
+                ? "h-16 w-16 rounded-2xl shadow-md ring-2 ring-white"
+                : undefined
+            }
+          />
+
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="min-w-0">
+                <h3
+                  className={
+                    variant === "guest"
+                      ? "text-lg font-bold text-text-primary"
+                      : "text-xl font-black text-slate-900 leading-tight"
+                  }
+                >
+                  {title}
+                </h3>
+                {roleHeadline ? (
+                  <p
+                    className={
+                      variant === "candidate"
+                        ? "text-sm font-semibold text-indigo-600 mt-0.5 leading-snug"
+                        : "text-sm font-medium text-indigo-800/85 mt-1 leading-snug"
+                    }
+                  >
+                    {roleHeadline}
                   </p>
-                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                    {workingConditions.trim()}
-                  </p>
+                ) : null}
+                <div
+                  className={
+                    variant === "candidate"
+                      ? "text-sm text-slate-500 mt-2 flex flex-wrap gap-x-4 gap-y-1"
+                      : "flex flex-wrap items-center text-sm text-gray-500 mt-1.5 gap-x-4 gap-y-1"
+                  }
+                >
+                  <span
+                    className={
+                      variant === "candidate" ? "flex items-center gap-1.5" : "flex items-center gap-1"
+                    }
+                  >
+                    <Building2 className="w-3.5 h-3.5 shrink-0" />
+                    {company}
+                  </span>
+                  <span
+                    className={
+                      variant === "candidate" ? "flex items-center gap-1.5" : "flex items-center gap-1"
+                    }
+                  >
+                    <MapPin className="w-3.5 h-3.5 shrink-0" />
+                    {recruiterLocation}
+                  </span>
+                  <span
+                    className={
+                      variant === "candidate" ? "flex items-center gap-1.5" : "flex items-center gap-1"
+                    }
+                  >
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    {posted}
+                  </span>
                 </div>
-              ) : null}
-            </div>
+                {workingConditions?.trim() ? (
+                  variant === "candidate" ? (
+                    <div className="mt-3 rounded-2xl bg-linear-to-r from-slate-50 to-indigo-50/50 border border-indigo-100/60 px-4 py-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-1 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" />
+                        Work arrangement
+                      </p>
+                      <p className="text-sm text-slate-700 leading-relaxed">
+                        {workingConditions.trim()}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-lg border border-gray-100 bg-slate-50/80 px-3 py-2.5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                        Work arrangement
+                      </p>
+                      <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                        {workingConditions.trim()}
+                      </p>
+                    </div>
+                  )
+                ) : null}
+              </div>
 
-            <div className="flex items-start justify-end gap-2 shrink-0">
-              {scoreSlot}
-              {starSlot}
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-              <SkillBadges
-                skills={tags}
-                candidateSkills={candidateSkills}
-                variant={variant}
-              />
-              <span
+              <div
                 className={
-                  variant === "guest"
-                    ? "inline-flex w-fit px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-md border border-blue-100"
-                    : "inline-flex w-fit px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-full border border-blue-200/80 backdrop-blur-sm"
+                  variant === "candidate"
+                    ? "flex flex-col items-end gap-2 shrink-0"
+                    : "flex items-start justify-end gap-2 shrink-0"
                 }
               >
-                {typePill}
-              </span>
+                {scoreSlot}
+                {starSlot}
+              </div>
             </div>
-            <div className="flex w-full flex-wrap gap-2 justify-stretch sm:w-auto sm:justify-end">
-              {detailsSlot}
-              {applySlot}
+
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+                <SkillBadges
+                  skills={tags}
+                  candidateSkills={candidateSkills}
+                  variant={variant}
+                />
+                <span
+                  className={
+                    variant === "guest"
+                      ? "inline-flex w-fit px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-md border border-blue-100"
+                      : "inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-full shadow-sm"
+                  }
+                >
+                  {variant === "candidate" && <Briefcase className="w-3 h-3" />}
+                  {typePill}
+                </span>
+              </div>
+              <div className="flex w-full flex-wrap gap-2 justify-stretch sm:w-auto sm:justify-end">
+                {detailsSlot}
+                {applySlot}
+              </div>
             </div>
+
+            {showRoleAndAmenities ? (
+              <div
+                className={
+                  variant === "candidate"
+                    ? "mt-6 pt-5 border-t border-slate-100 grid md:grid-cols-2 gap-5"
+                    : "mt-6 pt-6 border-t border-gray-100 grid md:grid-cols-2 gap-6"
+                }
+              >
+                {variant === "candidate" ? (
+                  <div className="bg-slate-50/80 rounded-2xl p-4">
+                    <h4 className="font-bold text-xs uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                      <FileText size={12} className="text-slate-400" />
+                      Role description
+                    </h4>
+                    {hasMeaningfulHtmlText(roleDescription) ? (
+                      <div
+                        className="prose prose-sm max-w-none text-gray-700"
+                        dangerouslySetInnerHTML={{ __html: roleDescription }}
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-500">No description provided.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <h4 className="font-bold text-sm text-gray-900 mb-2">Role description</h4>
+                    {hasMeaningfulHtmlText(roleDescription) ? (
+                      <div
+                        className="prose prose-sm max-w-none text-gray-700"
+                        dangerouslySetInnerHTML={{ __html: roleDescription }}
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-500">No description provided.</p>
+                    )}
+                  </div>
+                )}
+
+                {variant === "candidate" ? (
+                  <div className="bg-teal-50/60 rounded-2xl p-4 border border-teal-100/60">
+                    <h4 className="font-bold text-xs uppercase tracking-widest text-teal-500 mb-3 flex items-center gap-2">
+                      <Shield size={12} className="text-teal-500" />
+                      Accessibility amenities
+                    </h4>
+                    {amenities.length > 0 ? (
+                      <ul className="space-y-2">
+                        {amenities.map((line, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-teal-900">
+                            <span className="w-5 h-5 rounded-full bg-teal-500 flex items-center justify-center shrink-0 mt-0.5">
+                              <CheckCircle2 className="w-3 h-3 text-white" />
+                            </span>
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-teal-600/70 italic">
+                        No specific accommodations listed.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <h4 className="font-bold text-sm text-gray-900 mb-2">
+                      Accessibility amenities
+                    </h4>
+                    {amenities.length > 0 ? (
+                      <ul className="space-y-2">
+                        {amenities.map((line, i) => (
+                          <li key={`am-${i}`} className="flex items-start text-sm text-gray-600">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 mr-2 shrink-0 mt-0.5" />
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        No specific accommodations listed yet. Check the role description or contact
+                        the employer.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {aiInsightSlot ? (
+              <div
+                className={
+                  variant === "candidate"
+                    ? "mt-5 pt-5 border-t border-indigo-100/50"
+                    : "mt-6 pt-6 border-t border-indigo-100/80"
+                }
+              >
+                {aiInsightSlot}
+              </div>
+            ) : null}
           </div>
-
-          {showRoleAndAmenities ? (
-            <div className="mt-6 pt-6 border-t border-gray-100 grid md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-bold text-sm text-gray-900 mb-2">Role description</h4>
-                {hasMeaningfulHtmlText(roleDescription) ? (
-                  <div
-                    className="prose prose-sm max-w-none text-gray-700"
-                    dangerouslySetInnerHTML={{ __html: roleDescription }}
-                  />
-                ) : (
-                  <p className="text-sm text-gray-500">No description provided.</p>
-                )}
-              </div>
-              <div>
-                <h4 className="font-bold text-sm text-gray-900 mb-2">Accessibility amenities</h4>
-                {amenities.length > 0 ? (
-                  <ul className="space-y-2">
-                    {amenities.map((line, i) => (
-                      <li key={`am-${i}`} className="flex items-start text-sm text-gray-600">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 mr-2 shrink-0 mt-0.5" />
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    No specific accommodations listed yet. Check the role description or contact
-                    the employer.
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          {aiInsightSlot ? (
-            <div className="mt-6 pt-6 border-t border-indigo-100/80">{aiInsightSlot}</div>
-          ) : null}
         </div>
       </div>
     </motion.article>

@@ -48,6 +48,15 @@ body {
     radial-gradient(at 5%  75%, rgba(20, 184, 166, 0.15) 0px, transparent 50%);
 }
 
+@keyframes badge-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(13, 148, 136, 0.3); }
+  50%       { box-shadow: 0 0 20px rgba(13, 148, 136, 0.6); }
+}
+
+.badge-earned {
+  animation: badge-glow 2.5s ease-in-out infinite;
+}
+
 @keyframes recommendation-shimmer {
   0%   { transform: translateX(-120%) skewX(-12deg); }
   100% { transform: translateX(220%)  skewX(-12deg); }

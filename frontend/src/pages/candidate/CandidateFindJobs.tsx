@@ -341,6 +341,7 @@ export default function CandidateFindJobs() {
       .catch(() => {});
   }, [isCandidate]);
 
+
   const filteredJobs = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return offers.filter((job) => {
@@ -424,6 +425,7 @@ export default function CandidateFindJobs() {
       await apiClient.post("/applications/", { offer_id: offerId, cover_letter: "" });
       setAppliedIds((prev) => new Set([...prev, offerId]));
       showToast(`Successfully applied to ${offerTitle}!`, "success");
+      apiClient.post("/badges/award/first_application").catch(() => {});
     } catch (err: any) {
       if (err?.response?.status === 409) {
         showToast("You have already applied to this offer", "info");

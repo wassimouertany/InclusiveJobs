@@ -1,3 +1,6 @@
+import asyncio
+import json
+import logging
 from datetime import date, datetime, timezone
 from typing import Optional
 
@@ -21,7 +24,7 @@ from resume_extraction import (
     extract_text_from_disability_document,
     extract_text_from_resume_pdf,
 )
-from services.parser_service import normalize_birth_date_iso, parse_document_text
+from services.parser_service import normalize_birth_date_iso, parse_document_text, ResourceExhaustedError
 from utils import upload_file_to_gridfs, upload_file_to_gridfs_bytes
 from rag_service import invalidate_candidate_index_cache
 from models import (
@@ -35,6 +38,39 @@ from models import (
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
+logger = logging.getLogger(__name__)
+
+
+def _normalize_list_fields(doc: dict, fields: tuple = ("work_accommodations", "key_skills", "required_skills")) -> None:
+    """Parse any field that was stored as a JSON string instead of a real array, and flatten
+    arrays whose elements are themselves JSON-encoded arrays (e.g. ['["a","b"]'])."""
+    for field in fields:
+        val = doc.get(field)
+        if val is None:
+            doc[field] = []
+        elif isinstance(val, str):
+            try:
+                parsed = json.loads(val)
+                doc[field] = parsed if isinstance(parsed, list) else []
+            except Exception:
+                doc[field] = []
+        elif isinstance(val, list):
+            flat: list = []
+            for item in val:
+                if isinstance(item, str):
+                    s = item.strip()
+                    if s.startswith("[") and s.endswith("]"):
+                        try:
+                            inner = json.loads(s)
+                            if isinstance(inner, list):
+                                flat.extend(str(x) for x in inner)
+                                continue
+                        except Exception:
+                            pass
+                    flat.append(item)
+                else:
+                    flat.append(str(item))
+            doc[field] = flat
 
 
 def hash_password(password: str) -> str:
@@ -168,28 +204,101 @@ async def extract_candidate_documents(
             detail="Provide at least one file: resume (PDF) or disability_card (PDF/image).",
         )
 
-    out: dict = {"resume": None, "disability_card": None}
+    out: dict = {"resume": {}, "disability_card": {}, "quota_exceeded": False}
 
     if resume and resume.filename:
         if not resume.filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Resume must be a PDF file.")
         rb = await resume.read()
         raw = extract_text_from_resume_pdf(rb) if rb else ""
-        out["resume"] = await parse_document_text(raw, "resume")
+        if raw:
+            try:
+                out["resume"] = await parse_document_text(raw, "resume")
+            except ResourceExhaustedError:
+                out["resume"] = {}
+                out["quota_exceeded"] = True
+            except Exception as e:
+                logger.warning(f"Resume parse failed: {e}")
+                out["resume"] = {}
 
     if disability_card and disability_card.filename:
-        db = await disability_card.read()
+        dc_bytes = await disability_card.read()
         raw_dc = (
-            extract_text_from_disability_document(db, disability_card.filename or "")
-            if db
+            extract_text_from_disability_document(dc_bytes, disability_card.filename or "")
+            if dc_bytes
             else ""
         )
-        out["disability_card"] = await parse_document_text(raw_dc, "disability_card")
+        if raw_dc:
+            try:
+                out["disability_card"] = await parse_document_text(raw_dc, "disability_card")
+            except ResourceExhaustedError:
+                out["disability_card"] = {}
+                out["quota_exceeded"] = True
+            except Exception as e:
+                logger.warning(f"Card parse failed: {e}")
+                out["disability_card"] = {}
 
     return out
 
 
-@router.post("/candidates/")
+async def _enrich_candidate_with_ai(candidate_id: str, resume_text: str, card_text: str) -> None:
+    """Run Gemini parsing after registration and patch the candidate document."""
+    try:
+        from bson import ObjectId as _ObjId
+
+        parsed_resume: dict = {}
+        parsed_card: dict = {}
+
+        if resume_text.strip():
+            try:
+                parsed_resume = await parse_document_text(resume_text, "resume")
+            except Exception as e:
+                logger.warning("AI resume parse failed for %s: %s", candidate_id, e)
+
+        if card_text.strip():
+            try:
+                parsed_card = await parse_document_text(card_text, "disability_card")
+            except Exception as e:
+                logger.warning("AI card parse failed for %s: %s", candidate_id, e)
+
+        if not parsed_resume and not parsed_card:
+            return
+
+        current = await db.candidates.find_one({"_id": _ObjId(candidate_id)})
+        if not current:
+            return
+
+        update: dict = {}
+
+        ai_skills = parsed_resume.get("key_skills") or []
+        if ai_skills:
+            existing_skills = current.get("key_skills") or []
+            update["key_skills"] = list(dict.fromkeys(existing_skills + ai_skills))
+
+        if not current.get("profile_title") and parsed_resume.get("profile_title"):
+            update["profile_title"] = parsed_resume["profile_title"]
+
+        if (current.get("years_of_experience") or 0) == 0 and parsed_resume.get("years_of_experience"):
+            update["years_of_experience"] = parsed_resume["years_of_experience"]
+
+        if parsed_resume.get("education_level"):
+            update["education_level"] = parsed_resume["education_level"]
+
+        card_disability = parsed_card.get("disability_type")
+        if card_disability and card_disability != "other":
+            update["disability_type"] = card_disability
+
+        if update:
+            update["ai_enriched_at"] = datetime.now(timezone.utc)
+            await db.candidates.update_one({"_id": _ObjId(candidate_id)}, {"$set": update})
+            invalidate_candidate_index_cache()
+            logger.info("AI enrichment completed for candidate %s", candidate_id)
+
+    except Exception as e:
+        logger.error("Background AI enrichment failed for %s: %s", candidate_id, e)
+
+
+@router.post("/candidates/", status_code=201)
 async def register_candidate(
     last_name: str = Form(...),
     first_name: str = Form(...),
@@ -246,32 +355,19 @@ async def register_candidate(
         await resume.seek(0)
         resume_id = await upload_file_to_gridfs(resume)
 
-    parsed_resume: dict = {}
-    if resume_text_raw.strip():
-        parsed_resume = await parse_document_text(resume_text_raw, "resume")
-
-    parsed_card: dict = {}
-    if disability_card_text.strip():
-        parsed_card = await parse_document_text(disability_card_text, "disability_card")
-
-    merged_title, merged_skills, merged_years = _merge_resume_fields(
-        profile_title, key_skills, years_of_experience, parsed_resume
-    )
-    merged_disability = _resolve_disability_type(disability_type, parsed_card)
-    merged_fn, merged_ln, merged_birth = _merge_identity_from_documents(
-        first_name, last_name, birth_date, parsed_card, parsed_resume
-    )
-    merged_email, merged_phone, merged_addr, merged_ind, merged_edu, merged_gen = (
-        _merge_contact_from_resume(
-            email,
-            phone_number,
-            address,
-            industry,
-            education_level,
-            gender,
-            parsed_resume,
-        )
-    )
+    merged_email = email.strip().lower()
+    merged_fn = first_name.strip()
+    merged_ln = last_name.strip()
+    merged_birth = birth_date
+    merged_phone = phone_number.strip()
+    merged_addr = address.strip()
+    merged_ind = industry.strip()
+    merged_edu = education_level.value
+    merged_gen = gender.value
+    merged_years = years_of_experience
+    merged_title = profile_title.strip()
+    merged_skills = key_skills
+    merged_disability = disability_type.value
 
     try:
         validate_email(merged_email)
@@ -311,11 +407,18 @@ async def register_candidate(
 
     result = await db.candidates.insert_one(candidate_dict)
     candidate_id = str(result.inserted_id)
+
+    if resume_text_raw.strip() or disability_card_text.strip():
+        asyncio.create_task(
+            _enrich_candidate_with_ai(candidate_id, resume_text_raw, disability_card_text)
+        )
+
     invalidate_candidate_index_cache()
 
     return {
         "id": candidate_id,
         "message": "Candidate registered successfully.",
+        "ai_enrichment": "pending" if (resume_text_raw.strip() or disability_card_text.strip()) else "skipped",
     }
 
 
@@ -514,6 +617,7 @@ async def get_my_profile(current_user: dict = Depends(get_current_candidate)):
     """Return the currently authenticated candidate's own profile."""
     current_user["_id"] = str(current_user["_id"])
     current_user.pop("password", None)
+    _normalize_list_fields(current_user)
     return current_user
 
 
@@ -642,6 +746,152 @@ async def get_my_recruiter_logo(current_user: dict = Depends(get_current_recruit
     return Response(content=data, media_type=media_type)
 
 
+@router.get("/recruiters/me/stats")
+async def get_my_recruiter_stats(current_user: dict = Depends(get_current_recruiter)):
+    """Return aggregated activity stats for the authenticated recruiter."""
+    rid = str(current_user["_id"])
+
+    (
+        total_offers,
+        open_offers,
+        total_applications,
+        pending_applications,
+        under_review_count,
+        interviews_scheduled,
+        accepted_count,
+        ai_matches_run,
+    ) = await asyncio.gather(
+        db.job_offers.count_documents({"recruiter_id": rid}),
+        db.job_offers.count_documents({"recruiter_id": rid, "status": "open"}),
+        db.applications.count_documents({"recruiter_id": rid}),
+        db.applications.count_documents({"recruiter_id": rid, "status": "submitted"}),
+        db.applications.count_documents({"recruiter_id": rid, "status": "under_review"}),
+        db.applications.count_documents({"recruiter_id": rid, "status": "interview_scheduled"}),
+        db.applications.count_documents({"recruiter_id": rid, "status": "accepted"}),
+        db.ai_match_logs.count_documents({"recruiter_id": rid}),
+    )
+
+    offers_cursor = db.job_offers.find({"recruiter_id": rid}, {"saved_candidates": 1})
+    offers = await offers_cursor.to_list(length=10_000)
+    total_saved_candidates = sum(len(o.get("saved_candidates", [])) for o in offers)
+
+    return {
+        "total_offers": total_offers,
+        "open_offers": open_offers,
+        "total_applications": total_applications,
+        "pending_applications": pending_applications,
+        "under_review": under_review_count,
+        "interviews_scheduled": interviews_scheduled,
+        "accepted": accepted_count,
+        "total_saved_candidates": total_saved_candidates,
+        "ai_matches_run": ai_matches_run,
+    }
+
+
+@router.get("/recruiters/{recruiter_id}/logo")
+async def get_recruiter_logo_public(recruiter_id: str):
+    """Public recruiter logo stream — no auth required."""
+    if not ObjectId.is_valid(recruiter_id):
+        raise HTTPException(status_code=400, detail="Invalid recruiter ID.")
+
+    recruiter = await db.recruiters.find_one(
+        {"_id": ObjectId(recruiter_id)}, {"logo_id": 1}
+    )
+    if not recruiter:
+        raise HTTPException(status_code=404, detail="Recruiter not found.")
+
+    logo_id = recruiter.get("logo_id")
+    if not logo_id or not ObjectId.is_valid(str(logo_id)):
+        raise HTTPException(status_code=404, detail="No logo.")
+
+    try:
+        grid_out = await fs.open_download_stream(ObjectId(str(logo_id)))
+    except NoFile:
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    data = await grid_out.read()
+    media_type = grid_out.content_type or "image/jpeg"
+    return Response(content=data, media_type=media_type)
+
+
+# ---------------------------------------------------------------------------
+# Recruiter public profile helpers
+# ---------------------------------------------------------------------------
+
+def _compute_inclusion_score(recruiter: dict, total_offers: int, total_hires: int) -> int:
+    base = 0
+    if recruiter.get("employees_with_disability", 0) > 0:
+        base += 30
+    strategy = recruiter.get("inclusion_strategy", "")
+    if strategy and len(strategy) > 50:
+        base += 20
+    if total_hires >= 1:
+        base += 20
+    if total_hires >= 5:
+        base += 15
+    if total_offers >= 3:
+        base += 15
+    return min(base, 100)
+
+
+def _inclusion_level(score: int) -> str:
+    if score >= 85:
+        return "Champion"
+    if score >= 65:
+        return "Gold"
+    if score >= 40:
+        return "Silver"
+    return "Bronze"
+
+
+async def _build_recruiter_public(recruiter: dict) -> dict:
+    rid = str(recruiter["_id"])
+    total_offers = await db.job_offers.count_documents({"recruiter_id": rid, "status": "open"})
+    total_hires = await db.applications.count_documents({"recruiter_id": rid, "status": "accepted"})
+    score = _compute_inclusion_score(recruiter, total_offers, total_hires)
+    return {
+        "_id": rid,
+        "company_name": recruiter.get("company_name", ""),
+        "company_industry": recruiter.get("company_industry", ""),
+        "location": recruiter.get("location", ""),
+        "employee_count": recruiter.get("employee_count", 0),
+        "employees_with_disability": recruiter.get("employees_with_disability", 0),
+        "inclusion_strategy": recruiter.get("inclusion_strategy", ""),
+        "logo_id": recruiter.get("logo_id"),
+        "founded_year": recruiter.get("founded_year", 0),
+        "created_at": recruiter.get("created_at"),
+        "total_offers": total_offers,
+        "total_hires": total_hires,
+        "inclusion_score": score,
+        "inclusion_level": _inclusion_level(score),
+    }
+
+
+@router.get("/recruiters/public/")
+async def list_recruiters_public():
+    """Public leaderboard — all recruiters ranked by inclusion_score desc, limit 20."""
+    cursor = db.recruiters.find()
+    recruiters = await cursor.to_list(length=500)
+    results = []
+    for r in recruiters:
+        results.append(await _build_recruiter_public(r))
+    results.sort(key=lambda x: x["inclusion_score"], reverse=True)
+    return {"recruiters": results[:20]}
+
+
+@router.get("/recruiters/public/{recruiter_id}")
+async def get_recruiter_public(recruiter_id: str):
+    """Public recruiter profile with inclusion stats. No auth required."""
+    if not ObjectId.is_valid(recruiter_id):
+        raise HTTPException(status_code=400, detail="Invalid recruiter ID.")
+
+    recruiter = await db.recruiters.find_one({"_id": ObjectId(recruiter_id)})
+    if not recruiter:
+        raise HTTPException(status_code=404, detail="Recruiter not found.")
+
+    return await _build_recruiter_public(recruiter)
+
+
 @router.get("/candidates/{candidate_id}")
 async def get_candidate_by_id(candidate_id: str):
     """Public candidate profile endpoint for recruiter viewing."""
@@ -660,6 +910,8 @@ async def get_candidate_by_id(candidate_id: str):
     logo_id = candidate.get("logo_id")
     if logo_id and ObjectId.is_valid(str(logo_id)):
         candidate["photo_url"] = f"/users/candidates/{candidate['_id']}/photo"
+
+    _normalize_list_fields(candidate)
 
     return candidate
 

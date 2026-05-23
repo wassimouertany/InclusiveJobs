@@ -3,6 +3,7 @@ export type Page =
   | "login"
   | "find-jobs"
   | "employers"
+  | "community"
   | "dashboard"
   | "dashboard-recruiter"
   | "dashboard-candidate-home"

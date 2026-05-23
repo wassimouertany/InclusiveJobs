@@ -46,19 +46,26 @@ export default function Features() {
             </div>
           </div>
 
-          {/* Right: 2×2 feature card grid */}
-          <div className="grid grid-cols-2 gap-4">
-            {featureCards.map(({ icon: Icon, label, cardBg, iconBg, iconColor }) => (
-              <div
-                key={label}
-                className={`${cardBg} rounded-2xl p-6 card-hover border border-transparent hover:border-primary/10`}
-              >
-                <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center mb-4`}>
-                  <Icon className={`w-5 h-5 ${iconColor}`} />
-                </div>
-                <p className="font-semibold text-text-primary text-sm leading-snug">{label}</p>
+          {/* Right: real photo */}
+          <div className="relative rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+            <img
+              src="/images/feature-albino-professional.jpg"
+              alt="Professional with albinism working independently on laptop in an accessible workspace"
+              className="w-full h-full object-cover rounded-3xl"
+              loading="lazy"
+            />
+            {/* Floating badge */}
+            <div className="absolute bottom-5 left-5 bg-white/95 backdrop-blur-sm rounded-2xl px-4 py-3 shadow-xl flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-teal-500 flex items-center justify-center shrink-0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
               </div>
-            ))}
+              <div>
+                <p className="text-sm font-bold text-slate-900 leading-none">Accessible by Design</p>
+                <p className="text-xs text-slate-500 mt-0.5">WCAG 2.1 compliant</p>
+              </div>
+            </div>
           </div>
 
         </div>

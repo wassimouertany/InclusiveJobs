@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { User, Menu, X, Heart } from "lucide-react";
+import { User, Menu, X } from "lucide-react";
 import { useNavigation } from "../context/NavigationContext";
 import { useAuthStore } from "../config/auth";
 import NotificationBell from "./NotificationBell";
@@ -50,16 +50,19 @@ export default function Navbar() {
     { id: "landing", label: "Home" },
     { id: "find-jobs", label: "Find Jobs" },
     { id: "employers", label: "For Employers" },
+    { id: "community", label: "Community" },
   ];
 
   const candidateNavLinks: { id: Page; label: string }[] = [
     { id: "landing", label: "Home" },
     { id: "dashboard-candidate-find-jobs", label: "Find Jobs" },
+    { id: "community", label: "Community" },
     { id: "dashboard-candidate-home", label: "My Dashboard" },
   ];
   const recruiterNavLinks: { id: Page; label: string }[] = [
     { id: "landing", label: "Home" },
     { id: "find-jobs", label: "Find Jobs" },
+    { id: "community", label: "Community" },
     { id: "dashboard-recruiter", label: "My Dashboard" },
   ];
 
@@ -167,9 +170,11 @@ export default function Navbar() {
             className="flex items-center cursor-pointer group"
             onClick={() => navigate("landing")}
           >
-            <div className="w-10 h-10 bg-linear-to-br from-primary to-primary-light rounded-xl flex items-center justify-center mr-3 shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
-              <Heart className="text-white w-6 h-6 fill-current" />
-            </div>
+            <img
+              src="/images/logo.png"
+              alt="InclusiveJobs"
+              className="w-14 h-14 mr-2 object-contain group-hover:scale-105 transition-transform duration-300"
+            />
             <span className="font-display font-bold text-xl text-text-primary tracking-tight group-hover:text-primary transition-colors">
               InclusiveJobs
             </span>

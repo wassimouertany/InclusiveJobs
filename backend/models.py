@@ -218,6 +218,8 @@ class NotificationType(str, Enum):
     APPLICATION_STATUS_CHANGED = "application_status_changed"
     INTERVIEW_SCHEDULED = "interview_scheduled"
     NEW_AI_MATCH = "new_ai_match"
+    STORY_REACTION = "story_reaction"
+    STORY_COMMENT = "story_comment"
 
 
 class ApplicationDB(BaseModel):
@@ -259,7 +261,70 @@ class NotificationDB(BaseModel):
     is_read: bool = False
     related_offer_id: Optional[str] = None
     related_application_id: Optional[str] = None
+    related_story_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_objectid(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+
+
+class ReactionType(str, Enum):
+    INSPIRING    = "inspiring"
+    SOLIDARITY   = "solidarity"
+    ACHIEVEMENT  = "achievement"
+    SUPPORTIVE   = "supportive"
+
+
+class BadgeType(str, Enum):
+    PROFILE_COMPLETE    = "profile_complete"
+    CV_CHAMPION         = "cv_champion"
+    FIRST_APPLICATION   = "first_application"
+    HIGHLY_MATCHED      = "highly_matched"
+    HIRED               = "hired"
+    COMMUNITY_VOICE     = "community_voice"
+    INCLUSION_ADVOCATE  = "inclusion_advocate"
+
+
+class StoryDB(BaseModel):
+    """MongoDB document model for a community story post."""
+
+    model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
+
+    id: Optional[str] = Field(default=None, alias="_id")
+    author_id: str
+    author_role: str                    # "CANDIDATE" or "RECRUITER"
+    author_name: str                    # first+last or company_name
+    author_avatar_id: Optional[str] = None  # logo_id or profile photo id
+    content: str                        # max 500 chars
+    is_anonymous: bool = False
+    reactions: dict = Field(default_factory=dict)
+    # reactions shape: {"inspiring": ["user_id1", ...], "solidarity": [...], ...}
+    comments: list[dict] = Field(default_factory=list)
+    # comments shape: [{"_id": str, "author_id": str, "author_role": str, "author_name": str,
+    #                   "author_avatar_id": str|None, "content": str, "is_anonymous": bool, "created_at": str}]
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_objectid(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+
+
+class BadgeDB(BaseModel):
+    """MongoDB document model for a gamification badge awarded to a candidate."""
+
+    model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
+
+    id: Optional[str] = Field(default=None, alias="_id")
+    candidate_id: str
+    badge_type: BadgeType
+    earned_at: datetime = Field(default_factory=datetime.utcnow)
 
     @field_validator("id", mode="before")
     @classmethod
