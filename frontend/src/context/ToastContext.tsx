@@ -5,10 +5,10 @@ import {
   ReactNode,
   useCallback,
 } from "react";
-import { X, CheckCircle, AlertCircle, Info } from "lucide-react";
+import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-type ToastType = "success" | "error" | "info";
+type ToastType = "success" | "error" | "info" | "warning";
 
 export type ShowToastOptions = {
   message: string;
@@ -82,7 +82,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 ? "border-l-[3px] border-l-emerald-500"
                 : toast.type === "error"
                   ? "border-l-[3px] border-l-rose-500"
-                  : "border-l-[3px] border-l-sky-500");
+                  : toast.type === "warning"
+                    ? "border-l-[3px] border-l-amber-500"
+                    : "border-l-[3px] border-l-sky-500");
             return (
               <motion.div
                 key={toast.id}
@@ -99,11 +101,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                       ? "bg-emerald-50 text-emerald-600"
                       : toast.type === "error"
                         ? "bg-rose-50 text-rose-600"
-                        : "bg-sky-50 text-sky-600"
+                        : toast.type === "warning"
+                          ? "bg-amber-50 text-amber-600"
+                          : "bg-sky-50 text-sky-600"
                   }`}
                 >
                   {toast.type === "success" && <CheckCircle className="h-5 w-5" strokeWidth={2.25} />}
                   {toast.type === "error" && <AlertCircle className="h-5 w-5" strokeWidth={2.25} />}
+                  {toast.type === "warning" && <AlertTriangle className="h-5 w-5" strokeWidth={2.25} />}
                   {toast.type === "info" && <Info className="h-5 w-5" strokeWidth={2.25} />}
                 </div>
 

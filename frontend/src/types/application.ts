@@ -9,7 +9,9 @@ export type NotificationType =
   | "application_received"
   | "application_status_changed"
   | "interview_scheduled"
-  | "new_ai_match";
+  | "new_ai_match"
+  | "story_reaction"
+  | "story_comment";
 
 export interface Application {
   _id: string;

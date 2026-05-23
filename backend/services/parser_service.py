@@ -16,6 +16,10 @@ from rag_service import get_llm
 
 logger = logging.getLogger(__name__)
 
+
+class ResourceExhaustedError(Exception):
+    """Raised when Gemini quota is exhausted after all retries."""
+
 MAX_DOC_TEXT_CHARS = 16000
 
 DOC_TYPES = frozenset({"resume", "disability_card"})
@@ -320,6 +324,67 @@ def _heuristic_resume_header_names(ocr: str) -> tuple[str, str]:
     return "", ""
 
 
+def _parse_locally(text: str, doc_type: str) -> dict:
+    result = {}
+    t = text.lower()
+
+    if doc_type == "resume":
+        m = re.search(r'[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}', text)
+        if m:
+            result["email"] = m.group(0)
+
+        m = re.search(r'[\+\(]?[0-9][0-9 .\-\(\)]{7,}[0-9]', text)
+        if m:
+            result["phone_number"] = m.group(0).strip()
+
+        m = re.search(r'(\d+)\s*(?:years?|ans?)\s*(?:of\s*)?(?:experience|expérience)', text, re.I)
+        if m:
+            result["years_of_experience"] = int(m.group(1))
+
+        for kw, val in [
+            ("doctorate", "doctorate"), ("phd", "doctorate"),
+            ("master", "masters"), ("mba", "masters"),
+            ("ingénieur", "engineering_degree"), ("engineering", "engineering_degree"),
+            ("bachelor", "bachelors"), ("licence", "bachelors"), ("b.tech", "bachelors"),
+            ("baccalauréat", "high_school"), ("high school", "high_school"),
+            ("vocational", "vocational_training"), ("bts", "vocational_training"),
+        ]:
+            if kw in t:
+                result["education_level"] = val
+                break
+
+        SKILLS = [
+            "python", "java", "javascript", "typescript", "react", "angular", "vue",
+            "nodejs", "fastapi", "django", "flask", "spring", "mongodb", "postgresql",
+            "mysql", "docker", "kubernetes", "git", "aws", "azure", "figma", "sql",
+            "html", "css", "tailwind", "langchain", "machine learning", "tensorflow",
+            "pytorch", "scrum", "agile", "jira", "linux", "bash", "c++", "c#", "php",
+            "ruby", "swift", "kotlin", "flutter", "dart", "redis", "elasticsearch",
+        ]
+        result["key_skills"] = [s for s in SKILLS if s in t]
+
+    if doc_type == "disability_card":
+        m = re.search(r'(\d{4}-\d{2}-\d{2})', text)
+        if m:
+            result["expiry_date"] = m.group(1)
+        m2 = re.search(r'(\d{2})[\/\-](\d{2})[\/\-](\d{4})', text)
+        if m2:
+            result["expiry_date"] = f"{m2.group(3)}-{m2.group(2)}-{m2.group(1)}"
+
+        for kw, val in [
+            ("motor", "motor"), ("mobility", "motor"), ("wheelchair", "motor"),
+            ("visual", "visual"), ("blind", "visual"), ("sight", "visual"),
+            ("hearing", "hearing"), ("deaf", "hearing"),
+            ("cognitive", "cognitive"), ("learning", "cognitive"),
+            ("psychological", "psychological"), ("mental", "psychological"),
+        ]:
+            if kw in t:
+                result["disability_type"] = val
+                break
+
+    return result
+
+
 async def parse_document_text(text: str, doc_type: str) -> dict[str, Any]:
     """
     Ask Gemini to return strict JSON for the given document OCR text.
@@ -404,14 +469,20 @@ Rules:
 - For birth_date convert formats like 07-DEC-1989 or 17/01/2028-style birth lines to YYYY-MM-DD when possible.
 """
 
+    llm = get_llm()
     try:
-        llm = get_llm()
         response = await llm.ainvoke(prompt)
+    except Exception as e:
+        err_str = str(e)
+        if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str or "rate" in err_str.lower():
+            logger.warning("LLM quota hit — using local parser fallback")
+            return _parse_locally(text, doc_type)
+        raise
+
+    try:
         raw_out = getattr(response, "content", str(response))
         if isinstance(raw_out, list):
-            raw_out = "".join(
-                getattr(b, "text", str(b)) for b in raw_out
-            )
+            raw_out = "".join(getattr(b, "text", str(b)) for b in raw_out)
         raw_out = str(raw_out).strip()
         parsed = json.loads(_strip_json_fences(raw_out))
     except Exception as exc:

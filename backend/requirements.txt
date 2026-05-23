@@ -9,6 +9,7 @@ bcrypt
 email-validator
 PyJWT
 langchain-google-genai
+langchain-groq
 langchain-community
 langchain
 langchain-core

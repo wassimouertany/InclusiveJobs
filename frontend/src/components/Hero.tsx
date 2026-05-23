@@ -105,8 +105,8 @@ export default function Hero() {
             >
               <div className="aspect-4/3 relative">
                 <img
-                  src="/images/hero-inclusive-team.png"
-                  alt="Diverse team collaborating in an inclusive modern workplace"
+                  src="/images/hero-wheelchair-team.jpg"
+                  alt="Two professionals in wheelchairs working confidently in an inclusive modern workplace"
                   className="w-full h-full object-cover"
                   loading="eager"
                   fetchPriority="high"

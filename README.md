@@ -22,7 +22,6 @@ Contrairement aux plateformes classiques, InclusiveJobs utilise l'**Intelligence
 
 ### Backend
 
-
 | Technologie            | Rôle                                         |
 | ---------------------- | -------------------------------------------- |
 | **FastAPI**            | Framework API REST asynchrone                |

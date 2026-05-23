@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Loader2, Send } from "lucide-react";
 import { apiClient } from "../../services/apiClient";
 import { API_BASE_URL } from "../../config/api";
 import { useAuthStore } from "../../store/authStore";
@@ -12,6 +13,17 @@ import { useToast } from "../../context/ToastContext";
 type Tab = "stories" | "champions";
 type ReactionKey = "inspiring" | "solidarity" | "achievement" | "supportive";
 
+interface Comment {
+  _id: string;
+  author_id: string;
+  author_role: string;
+  author_name: string;
+  author_avatar_id: string | null;
+  content: string;
+  is_anonymous: boolean;
+  created_at: string;
+}
+
 interface Story {
   _id: string;
   author_id: string;
@@ -21,6 +33,7 @@ interface Story {
   content: string;
   is_anonymous: boolean;
   reactions: Partial<Record<ReactionKey, string[]>>;
+  comments: Comment[];
   created_at: string;
 }
 
@@ -181,25 +194,76 @@ function AuthorAvatar({ story }: { story: Story }) {
   );
 }
 
+function CommentAvatar({ comment }: { comment: Comment }) {
+  const [err, setErr] = useState(false);
+
+  if (comment.is_anonymous) return <AnonymousAvatar size={28} />;
+
+  if (!err) {
+    const src =
+      comment.author_role === "CANDIDATE"
+        ? `${API_BASE_URL}/users/candidates/${comment.author_id}/photo`
+        : `${API_BASE_URL}/users/recruiters/${comment.author_id}/logo`;
+    return (
+      <img
+        src={src}
+        alt={comment.author_name}
+        className="w-7 h-7 rounded-full object-cover shrink-0"
+        onError={() => setErr(true)}
+      />
+    );
+  }
+
+  return (
+    <div className="w-7 h-7 rounded-full bg-linear-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold text-[10px] shrink-0">
+      {nameInitials(comment.author_name)}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // StoryCard
 // ---------------------------------------------------------------------------
 function StoryCard({
   story,
   currentUserId,
+  currentUserRole,
   isLoggedIn,
   index,
   onReact,
   onDelete,
+  onPostComment,
+  onDeleteComment,
 }: {
   story: Story;
   currentUserId: string | null;
+  currentUserRole: string | null;
   isLoggedIn: boolean;
   index: number;
   onReact: (id: string, r: ReactionKey) => void;
   onDelete: (id: string) => void;
+  onPostComment: (storyId: string, content: string, anon: boolean) => Promise<Comment | null>;
+  onDeleteComment: (storyId: string, commentId: string) => Promise<boolean>;
 }) {
   const isOwner = !!currentUserId && currentUserId === story.author_id;
+  const [expanded, setExpanded] = useState(false);
+  const [commentInput, setCommentInput] = useState("");
+  const [commentAnon, setCommentAnon] = useState(false);
+  const [posting, setPosting] = useState(false);
+
+  const commentCount = story.comments?.length ?? 0;
+
+  async function handlePostComment() {
+    const content = commentInput.trim();
+    if (!content || !isLoggedIn || posting) return;
+    setPosting(true);
+    try {
+      await onPostComment(story._id, content, commentAnon);
+      setCommentInput("");
+    } finally {
+      setPosting(false);
+    }
+  }
 
   return (
     <motion.div
@@ -249,24 +313,159 @@ function StoryCard({
           const count   = users.length;
           const reacted = isLoggedIn && !!currentUserId && users.includes(currentUserId);
           const cls = reacted
-            ? "bg-teal-500 text-white"
+            ? "bg-teal-500 text-white shadow-sm shadow-teal-500/30"
             : count > 0
             ? "bg-teal-500/20 text-teal-300 border border-teal-500/30"
             : "bg-white/5 text-white/50 hover:bg-white/10";
           return (
-            <button
-              key={key}
-              onClick={() => isLoggedIn && onReact(story._id, key)}
-              title={isLoggedIn ? undefined : "Sign in to react"}
-              className={`rounded-full px-3 py-1.5 text-sm flex items-center gap-1.5 transition-all ${cls} ${!isLoggedIn ? "cursor-default" : "cursor-pointer"}`}
-            >
-              <span>{emoji}</span>
-              <span>{label}</span>
-              {count > 0 && <span className="font-semibold">{count}</span>}
-            </button>
+            <div key={key} className="relative group">
+              {count > 0 && (
+                <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs rounded-lg px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-white/20 shadow-lg z-10">
+                  {count} {label}
+                </span>
+              )}
+              <button
+                onClick={() => isLoggedIn && onReact(story._id, key)}
+                title={isLoggedIn ? undefined : "Sign in to react"}
+                className={`rounded-full px-3 py-1.5 text-sm flex items-center gap-1.5 transition-all ${cls} ${!isLoggedIn ? "cursor-default" : "cursor-pointer"}`}
+              >
+                <span>{emoji}</span>
+                <span>{label}</span>
+                {count > 0 && (
+                  <span className={`font-bold text-sm ${reacted ? "text-white" : "text-teal-300"}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            </div>
           );
         })}
       </div>
+
+      {/* Comment toggle bar */}
+      <div className="border-t border-white/10 mt-4 pt-3 flex items-center justify-between">
+        <span className="text-white/50 text-sm">
+          💬 {commentCount} comment{commentCount !== 1 ? "s" : ""}
+        </span>
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="text-teal-400 text-sm font-medium hover:text-teal-300 transition-colors"
+        >
+          {expanded ? "Hide ▴" : "View comments ▾"}
+        </button>
+      </div>
+
+      {/* Comments section */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 space-y-3">
+              {/* Comment list */}
+              {commentCount === 0 ? (
+                <p className="text-white/30 text-sm text-center py-3">
+                  No comments yet — be the first!
+                </p>
+              ) : (
+                (story.comments ?? []).map((comment) => {
+                  const isCommentOwner = !!currentUserId && comment.author_id === currentUserId;
+                  return (
+                    <div key={comment._id} className="group">
+                      <div className="flex items-start gap-2">
+                        <CommentAvatar comment={comment} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-white/80 text-xs font-semibold">
+                              {comment.is_anonymous ? "Anonymous Member" : comment.author_name}
+                            </span>
+                            {!comment.is_anonymous && (
+                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                comment.author_role === "CANDIDATE"
+                                  ? "bg-teal-500/20 text-teal-300"
+                                  : "bg-blue-500/20 text-blue-300"
+                              }`}>
+                                {comment.author_role === "CANDIDATE" ? "Candidate" : "Recruiter"}
+                              </span>
+                            )}
+                            <span className="text-white/30 text-[10px] ml-auto shrink-0">
+                              {timeAgo(comment.created_at)}
+                            </span>
+                            {isCommentOwner && (
+                              <button
+                                onClick={() => onDeleteComment(story._id, comment._id)}
+                                className="text-white/30 hover:text-red-400 text-xs transition-colors opacity-0 group-hover:opacity-100"
+                                title="Delete comment"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-white/70 text-sm leading-relaxed mt-0.5">
+                            {comment.content}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Comment input */}
+              {isLoggedIn ? (
+                <div className="mt-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-linear-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold text-[10px] shrink-0">
+                      {currentUserRole === "CANDIDATE" ? "C" : "R"}
+                    </div>
+                    <input
+                      type="text"
+                      value={commentInput}
+                      onChange={(e) => setCommentInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handlePostComment();
+                        }
+                      }}
+                      placeholder="Add a comment..."
+                      className="flex-1 bg-white/10 border border-white/20 rounded-full px-4 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus:border-teal-500/50 focus:bg-white/15 transition-all"
+                    />
+                    {commentInput.trim() && (
+                      <button
+                        onClick={handlePostComment}
+                        disabled={posting}
+                        className="shrink-0 rounded-full p-2 bg-teal-500 hover:bg-teal-400 text-white transition-all disabled:opacity-50 ml-2"
+                      >
+                        {posting ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Send size={14} />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  <label className="flex items-center gap-2 mt-2 ml-8 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={commentAnon}
+                      onChange={(e) => setCommentAnon(e.target.checked)}
+                      className="w-3 h-3 accent-teal-500"
+                    />
+                    <span className="text-white/40 text-xs">Post anonymously</span>
+                  </label>
+                </div>
+              ) : (
+                <p className="text-white/30 text-sm text-center py-2">Sign in to comment</p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -281,10 +480,13 @@ function StoriesFeed({
   loadingMore,
   isLoggedIn,
   currentUserId,
+  currentUserRole,
   onReact,
   onDelete,
   onLoadMore,
   onOpenModal,
+  onPostComment,
+  onDeleteComment,
 }: {
   stories: Story[];
   loading: boolean;
@@ -292,10 +494,13 @@ function StoriesFeed({
   loadingMore: boolean;
   isLoggedIn: boolean;
   currentUserId: string | null;
+  currentUserRole: string | null;
   onReact: (id: string, r: ReactionKey) => void;
   onDelete: (id: string) => void;
   onLoadMore: () => void;
   onOpenModal: () => void;
+  onPostComment: (storyId: string, content: string, anon: boolean) => Promise<Comment | null>;
+  onDeleteComment: (storyId: string, commentId: string) => Promise<boolean>;
 }) {
   if (loading) {
     return (
@@ -334,9 +539,12 @@ function StoriesFeed({
             story={story}
             index={i}
             currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
             isLoggedIn={isLoggedIn}
             onReact={onReact}
             onDelete={onDelete}
+            onPostComment={onPostComment}
+            onDeleteComment={onDeleteComment}
           />
         ))}
       </div>
@@ -561,7 +769,7 @@ function WriteStoryModal({
 // ---------------------------------------------------------------------------
 export default function CommunityPage() {
   const navigate = useNavigate();
-  const { token, userId } = useAuthStore();
+  const { token, userId, role } = useAuthStore();
   const isLoggedIn = !!token;
   const { showToast } = useToast();
 
@@ -589,7 +797,10 @@ export default function CommunityPage() {
   // ── Fetch stories ──────────────────────────────────────────────────────
   const fetchStories = useCallback(async (skip: number, append: boolean) => {
     const res = await apiClient.get<{ stories: Story[] }>(`/stories/?skip=${skip}&limit=20`);
-    const fetched = res.data.stories;
+    const fetched = res.data.stories.map((s) => ({
+      ...s,
+      comments: s.comments ?? [],
+    }));
     setStories((prev) => (append ? [...prev, ...fetched] : fetched));
     setHasMore(fetched.length === 20);
   }, []);
@@ -627,7 +838,7 @@ export default function CommunityPage() {
         content: newStoryContent.trim(),
         is_anonymous: newStoryAnonymous,
       });
-      setStories((prev) => [res.data, ...prev]);
+      setStories((prev) => [{ ...res.data, comments: [] }, ...prev]);
       setShowWriteModal(false);
       setNewStoryContent("");
       setNewStoryAnonymous(false);
@@ -653,7 +864,7 @@ export default function CommunityPage() {
     } catch { /* silent */ }
   };
 
-  // ── Delete ─────────────────────────────────────────────────────────────
+  // ── Delete story ───────────────────────────────────────────────────────
   const handleDelete = async (storyId: string) => {
     if (!window.confirm("Delete this story?")) return;
     try {
@@ -662,6 +873,52 @@ export default function CommunityPage() {
       showToast({ message: "Story deleted.", type: "info" });
     } catch {
       showToast({ message: "Failed to delete story.", type: "error" });
+    }
+  };
+
+  // ── Post comment ───────────────────────────────────────────────────────
+  const handlePostComment = async (
+    storyId: string,
+    content: string,
+    anon: boolean,
+  ): Promise<Comment | null> => {
+    try {
+      const res = await apiClient.post<Comment>(`/stories/${storyId}/comments`, {
+        content,
+        is_anonymous: anon,
+      });
+      setStories((prev) =>
+        prev.map((s) =>
+          s._id === storyId
+            ? { ...s, comments: [...(s.comments ?? []), res.data] }
+            : s,
+        ),
+      );
+      return res.data;
+    } catch {
+      showToast({ message: "Failed to post comment", type: "error" });
+      return null;
+    }
+  };
+
+  // ── Delete comment ─────────────────────────────────────────────────────
+  const handleDeleteComment = async (
+    storyId: string,
+    commentId: string,
+  ): Promise<boolean> => {
+    try {
+      await apiClient.delete(`/stories/${storyId}/comments/${commentId}`);
+      setStories((prev) =>
+        prev.map((s) =>
+          s._id === storyId
+            ? { ...s, comments: (s.comments ?? []).filter((c) => c._id !== commentId) }
+            : s,
+        ),
+      );
+      return true;
+    } catch {
+      showToast({ message: "Failed to delete comment", type: "error" });
+      return false;
     }
   };
 
@@ -719,10 +976,13 @@ export default function CommunityPage() {
             loadingMore={loadingMore}
             isLoggedIn={isLoggedIn}
             currentUserId={userId}
+            currentUserRole={role}
             onReact={handleReact}
             onDelete={handleDelete}
             onLoadMore={handleLoadMore}
             onOpenModal={() => setShowWriteModal(true)}
+            onPostComment={handlePostComment}
+            onDeleteComment={handleDeleteComment}
           />
         ) : (
           <ChampionsTab

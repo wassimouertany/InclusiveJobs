@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Bell,
   Calendar,
   CheckCircle,
   Clock,
+  Heart,
+  MessageCircle,
 } from "lucide-react";
 import { apiClient } from "../services/apiClient";
 import type { Notification, NotificationType } from "../types/application";
@@ -32,13 +35,18 @@ const TYPE_STYLE: Record<
   application_status_changed:{ border: "border-yellow-400", bg: "bg-yellow-50", Icon: Clock },
   interview_scheduled:       { border: "border-purple-400", bg: "bg-purple-50", Icon: Calendar },
   new_ai_match:              { border: "border-green-400",  bg: "bg-green-50",  Icon: CheckCircle },
+  story_reaction:            { border: "border-rose-400",   bg: "bg-rose-50",   Icon: Heart },
+  story_comment:             { border: "border-purple-400", bg: "bg-purple-50", Icon: MessageCircle },
 };
+
+const STORY_TYPES = new Set<NotificationType>(["story_reaction", "story_comment"]);
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function NotificationBell() {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -113,6 +121,10 @@ export default function NotificationBell() {
         // ignore
       }
     }
+    if (STORY_TYPES.has(notif.type)) {
+      setOpen(false);
+      navigate("/community");
+    }
   }
 
   async function handleMarkAllRead() {
@@ -137,7 +149,7 @@ export default function NotificationBell() {
       >
         <Bell size={22} className="text-gray-600" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+          <span className="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
             {badgeLabel}
           </span>
         )}

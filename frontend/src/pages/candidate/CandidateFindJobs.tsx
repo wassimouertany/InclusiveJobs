@@ -341,6 +341,7 @@ export default function CandidateFindJobs() {
       .catch(() => {});
   }, [isCandidate]);
 
+
   const filteredJobs = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return offers.filter((job) => {

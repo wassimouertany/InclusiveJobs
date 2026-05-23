@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   Upload,
   Check,
+  CheckCircle,
   Cpu,
   Building2,
 } from "lucide-react";
@@ -101,6 +102,7 @@ type ExtractDocumentsResponse = {
     last_name: string;
     birth_date: string;
   } | null;
+  quota_exceeded?: boolean;
 };
 
 function isValidDisabilityType(value: string): value is HandicapType {
@@ -317,6 +319,46 @@ const translations = {
   },
 };
 
+const ACCOMMODATIONS = [
+  { label: "Ergonomic Furniture",  icon: "🪑", desc: "Adjustable chairs & desks" },
+  { label: "Physical Accessibility", icon: "♿", desc: "Ramps, elevators, restrooms" },
+  { label: "Digital Assistance",   icon: "💻", desc: "Screen readers, magnification" },
+  { label: "Flexible Work Model",  icon: "⏰", desc: "Remote or custom schedules" },
+  { label: "Visual Aid Equipment", icon: "👁",  desc: "Braille, large displays" },
+  { label: "Hearing Support",      icon: "🎧", desc: "Sign language, captions" },
+  { label: "Quiet Workspace",      icon: "🤫", desc: "Low-stimulus environment" },
+  { label: "Mental Health Support",icon: "🧠", desc: "Counseling, flexible breaks" },
+  { label: "Transport Assistance", icon: "🚌", desc: "Parking, shuttle access" },
+  { label: "Personal Assistant",   icon: "🤝", desc: "On-site support person" },
+  { label: "Adapted Equipment",    icon: "⌨️", desc: "Specialized keyboards, mice" },
+  { label: "Medical Break Time",   icon: "💊", desc: "Time for medication/therapy" },
+];
+
+const AI_MESSAGES = [
+  "Reading your documents...",
+  "Extracting skills with Gemini AI...",
+  "Analyzing work experience...",
+  "Detecting accessibility needs...",
+  "Building your profile...",
+  "Almost ready...",
+];
+
+function AiLoadingMessages() {
+  const [idx, setIdx] = React.useState(0);
+  React.useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % AI_MESSAGES.length), 2200);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="h-14 flex flex-col items-center justify-center">
+      <p className="text-lg font-bold text-white mb-1" style={{ animation: "fadeMsg 2.2s ease-in-out infinite" }}>
+        {AI_MESSAGES[idx]}
+      </p>
+      <p className="text-xs text-white/50 font-medium">OCR + Gemini AI • Please wait</p>
+    </div>
+  );
+}
+
 export default function Login() {
   const { navigate } = useNavigation();
   const { showToast } = useToast();
@@ -363,6 +405,7 @@ export default function Login() {
     resume: null as File | null,
   });
   const [docExtractBusy, setDocExtractBusy] = useState(false);
+  const [skillInput, setSkillInput] = React.useState("");
   const [disabilityCardExtract, setDisabilityCardExtract] = useState<{
     card_number: string;
     expiry_date: string;
@@ -506,12 +549,19 @@ export default function Login() {
           setDisabilityCardExtract(null);
         }
       }
-      showToast(
-        appliedSomething
-          ? "Form auto-filled from your documents."
-          : "Documents received; no fields could be extracted (try clearer scans or check API key).",
-        appliedSomething ? "success" : "info"
-      );
+      if (data.quota_exceeded) {
+        showToast(
+          "AI extraction unavailable right now — your OCR data was saved. You can add skills manually.",
+          "warning"
+        );
+      } else {
+        showToast(
+          appliedSomething
+            ? "Form auto-filled from your documents."
+            : "Documents received; no fields could be extracted (try clearer scans or check API key).",
+          appliedSomething ? "success" : "info"
+        );
+      }
     } catch {
       showToast("Could not analyze documents. Is the API running?", "error");
     } finally {
@@ -1027,127 +1077,92 @@ export default function Login() {
                 </div>
 
                 {docExtractBusy && (
-                  <div className="flex items-center gap-4 p-6 bg-primary/90 text-white rounded-3xl shadow-xl">
-                    <Cpu className="animate-spin shrink-0" size={32} />
-                    <div>
-                      <span className="block font-black text-lg">{t.aiThinking}</span>
-                      <span className="text-xs opacity-90 font-bold">
-                        OCR + Gemini auto-fill…
-                      </span>
+                  <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-slate-900 via-indigo-950 to-slate-900 p-8 text-white shadow-2xl">
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-teal-500/20 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+
+                    <div className="relative z-10 flex flex-col items-center text-center">
+                      <div className="relative w-24 h-24 mb-6">
+                        <div className="absolute inset-0 rounded-full border-2 border-teal-400/30" style={{ animation: "spin 3s linear infinite" }} />
+                        <div className="absolute inset-2 rounded-full border-2 border-indigo-400/40" style={{ animation: "spin 2s linear infinite reverse" }} />
+                        <div className="absolute inset-4 rounded-full border-2 border-purple-400/50" style={{ animation: "spin 1.5s linear infinite" }} />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-10 h-10 rounded-full bg-linear-to-br from-teal-400 to-indigo-500 flex items-center justify-center shadow-lg" style={{ animation: "pulse 2s ease-in-out infinite" }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+
+                      <AiLoadingMessages />
+
+                      <div className="flex gap-2 mt-4">
+                        {[0, 150, 300].map((delay) => (
+                          <div key={delay} className="w-2 h-2 rounded-full bg-teal-400" style={{ animation: "bounce 1s ease-in-out infinite", animationDelay: `${delay}ms` }} />
+                        ))}
+                      </div>
                     </div>
+
+                    <style>{`
+                      @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                      @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } }
+                      @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+                      @keyframes fadeMsg { 0%,100% { opacity: 0; transform: translateY(4px); } 15%,85% { opacity: 1; transform: translateY(0); } }
+                    `}</style>
                   </div>
                 )}
 
-                {disabilityCardExtract &&
-                  (disabilityCardExtract.card_number ||
-                    disabilityCardExtract.expiry_date) && (
-                    <p className="text-xs text-gray-500">
-                      {disabilityCardExtract.card_number && (
-                        <span className="block">
-                          Card no.: {disabilityCardExtract.card_number}
-                        </span>
-                      )}
-                      {disabilityCardExtract.expiry_date && (
-                        <span className="block">
-                          Expiry: {disabilityCardExtract.expiry_date}
-                        </span>
-                      )}
-                    </p>
-                  )}
-
-                <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-5 space-y-3">
-                  <p className="text-xs font-black uppercase tracking-wide text-gray-500">
-                    Auto-filled preview
-                  </p>
-                  {(candidateData.first_name || candidateData.last_name) && (
-                    <p className="text-sm text-gray-800">
-                      <span className="font-bold">Name: </span>
-                      {[candidateData.first_name, candidateData.last_name]
-                        .filter(Boolean)
-                        .join(" ")}
-                    </p>
-                  )}
-                  {candidateData.birth_date && (
-                    <p className="text-sm text-gray-800">
-                      <span className="font-bold">Birth date: </span>
-                      {candidateData.birth_date}
-                    </p>
-                  )}
-                  {candidateData.email && (
-                    <p className="text-sm text-gray-800">
-                      <span className="font-bold">{t.email}: </span>
-                      {candidateData.email}
-                    </p>
-                  )}
-                  {(candidateData.phone_number || candidateData.address) && (
-                    <p className="text-sm text-gray-800">
-                      {candidateData.phone_number && (
-                        <span className="block">
-                          <span className="font-bold">{t.phone}: </span>
-                          {candidateData.phone_number}
-                        </span>
-                      )}
-                      {candidateData.address && (
-                        <span className="block">
-                          <span className="font-bold">Address: </span>
-                          {candidateData.address}
-                        </span>
-                      )}
-                    </p>
-                  )}
-                  {candidateData.industry && (
-                    <p className="text-sm text-gray-800">
-                      <span className="font-bold">Industry: </span>
-                      {candidateData.industry}
-                    </p>
-                  )}
-                  {isValidEducationLevel(candidateData.education_level) &&
-                    candidateData.education_level !== EducationLevel.NO_DEGREE && (
-                    <p className="text-sm text-gray-800">
-                      <span className="font-bold">Education: </span>
-                      {EDUCATION_LEVEL_LABELS[candidateData.education_level as EducationLevel]}
-                    </p>
-                  )}
-                  {genderFromResumeExtract &&
-                    (candidateData.gender === "male" ||
-                      candidateData.gender === "female") && (
-                    <p className="text-sm text-gray-800">
-                      <span className="font-bold">Gender: </span>
-                      {candidateData.gender === "male" ? "Male" : "Female"}
-                    </p>
-                  )}
-                  {candidateData.profile_title && (
-                    <p className="text-sm text-gray-800">
-                      <span className="font-bold">{t.jobTitle}: </span>
-                      {candidateData.profile_title}
-                    </p>
-                  )}
-                  <p className="text-sm text-gray-800">
-                    <span className="font-bold">{t.disabilityCat}: </span>
-                    {t.disabilities[
-                      candidateData.disability_type as HandicapType
-                    ] ?? candidateData.disability_type}
-                  </p>
-                  <p className="text-sm text-gray-800">
-                    <span className="font-bold">{t.yearsExp}: </span>
-                    {candidateData.years_of_experience}
-                  </p>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {candidateData.key_skills.length > 0 ? (
-                      candidateData.key_skills.map((skill, idx) => (
-                        <span
-                          key={idx}
-                          className="px-3 py-1 bg-white text-primary text-xs font-bold rounded-xl border border-primary/20"
-                        >
-                          {skill}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-gray-400 italic">
-                        {t.uploadPrompt}
-                      </span>
-                    )}
+                <div className="rounded-3xl border border-teal-100 bg-linear-to-br from-teal-50/80 to-indigo-50/50 p-6">
+                  {/* Header */}
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-9 h-9 rounded-xl bg-teal-500 flex items-center justify-center shadow-sm shrink-0">
+                      <CheckCircle size={18} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">Profile Auto-Filled</p>
+                      <p className="text-xs text-slate-500">Extracted by Gemini AI • Review before continuing</p>
+                    </div>
+                    <div className="ml-auto bg-teal-100 text-teal-700 rounded-full px-3 py-1 text-xs font-bold shrink-0">✓ AI</div>
                   </div>
+
+                  {/* Grid of extracted fields */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { icon: "👤", label: "Name", value: `${candidateData.first_name || ""} ${candidateData.last_name || ""}`.trim() },
+                      { icon: "🎂", label: "Birth Date", value: candidateData.birth_date || "" },
+                      { icon: "📧", label: "Email", value: candidateData.email || "" },
+                      { icon: "📞", label: "Phone", value: candidateData.phone_number || "" },
+                      { icon: "📍", label: "Address", value: candidateData.address || "" },
+                      { icon: "🏭", label: "Industry", value: candidateData.industry || "" },
+                      { icon: "🎓", label: "Education", value: isValidEducationLevel(candidateData.education_level) ? EDUCATION_LEVEL_LABELS[candidateData.education_level as EducationLevel] : "" },
+                      { icon: "💼", label: "Job Title", value: candidateData.profile_title || "" },
+                      { icon: "♿", label: "Disability", value: t.disabilities[candidateData.disability_type as HandicapType] ?? candidateData.disability_type ?? "" },
+                      { icon: "📅", label: "Card Expiry", value: disabilityCardExtract?.expiry_date || "" },
+                      { icon: "🪪", label: "Card No.", value: disabilityCardExtract?.card_number || "" },
+                      { icon: "⚧", label: "Gender", value: genderFromResumeExtract && (candidateData.gender === "male" || candidateData.gender === "female") ? (candidateData.gender === "male" ? "Male" : "Female") : "" },
+                    ].filter((f) => f.value && f.value.trim()).map((field) => (
+                      <div key={field.label} className="bg-white/70 rounded-2xl p-3 border border-white">
+                        <p className="text-xs text-slate-400 mb-1">{field.icon} {field.label}</p>
+                        <p className="text-sm font-semibold text-slate-800 truncate">{field.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Skills preview */}
+                  {(candidateData.key_skills?.length ?? 0) > 0 && (
+                    <div className="mt-3 bg-white/70 rounded-2xl p-3 border border-white">
+                      <p className="text-xs text-slate-400 mb-2">⚡ Skills extracted</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {candidateData.key_skills.slice(0, 8).map((skill, i) => (
+                          <span key={i} className="bg-indigo-50 text-indigo-700 rounded-full px-2.5 py-0.5 text-xs font-medium">{skill}</span>
+                        ))}
+                        {candidateData.key_skills.length > 8 && (
+                          <span className="bg-slate-100 text-slate-500 rounded-full px-2.5 py-0.5 text-xs font-medium">+{candidateData.key_skills.length - 8} more</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1287,55 +1302,45 @@ export default function Login() {
                 </div>
 
                 <div className="pt-6 border-t border-gray-100">
-                  <label className="block text-sm font-black text-gray-700 mb-4">
-                    {t.accommodations}
-                  </label>
-                  <div className="grid grid-cols-1 gap-3">
-                    {[
-                      {
-                        label: lang === Language.AR ? "أثاث مريح" : lang === Language.FR ? "Mobilier ergonomique" : "Ergonomic Furniture",
-                        desc: lang === Language.AR ? "كراسي قابلة للتعديل، مكاتب للوقوف." : lang === Language.FR ? "Chaises réglables, bureaux debout." : "Adjustable chairs, specialized mice.",
-                      },
-                      {
-                        label: lang === Language.AR ? "إمكانية الوصول المادي" : lang === Language.FR ? "Accessibilité physique" : "Physical Accessibility",
-                        desc: lang === Language.AR ? "منحدرات، مصاعد، دورات مياه مجهزة." : lang === Language.FR ? "Rampes, ascenseurs, toilettes accessibles." : "Ramps, elevators, accessible restrooms.",
-                      },
-                      {
-                        label: lang === Language.AR ? "المساعدة الرقمية" : lang === Language.FR ? "Assistance numérique" : "Digital Assistance",
-                        desc: lang === Language.AR ? "قارئات الشاشة، أدوات التكبير." : lang === Language.FR ? "Lecteurs d'écran, outils de grossissement." : "Screen readers, magnification tools.",
-                      },
-                      {
-                        label: lang === Language.AR ? "نموذج عمل مرن" : lang === Language.FR ? "Modèle de travail flexible" : "Flexible Work Model",
-                        desc: lang === Language.AR ? "خيارات العمل عن بعد أو جداول مخصصة." : lang === Language.FR ? "Options hybrides ou horaires personnalisés." : "Hybrid options or customized schedules.",
-                      },
-                    ].map((item) => (
-                      <label
-                        key={item.label}
-                        className="flex items-start gap-4 p-4 bg-gray-50/50 rounded-2xl cursor-pointer border-2 border-transparent hover:border-primary/20 transition-all"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-1 w-6 h-6 rounded-lg border-gray-300 text-primary focus:ring-primary"
-                          checked={candidateData.work_accommodations.includes(item.label)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCandidateData({...candidateData, work_accommodations: [...candidateData.work_accommodations, item.label]});
+                  <label className="block text-sm font-black text-gray-700 mb-1">{t.accommodations}</label>
+                  <p className="text-xs text-slate-500 mb-4">Select all that apply — you can update these later</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {ACCOMMODATIONS.map((item) => {
+                      const selected = candidateData.work_accommodations.includes(item.label);
+                      return (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => {
+                            if (selected) {
+                              setCandidateData({ ...candidateData, work_accommodations: candidateData.work_accommodations.filter((a) => a !== item.label) });
                             } else {
-                              setCandidateData({...candidateData, work_accommodations: candidateData.work_accommodations.filter(a => a !== item.label)});
+                              setCandidateData({ ...candidateData, work_accommodations: [...candidateData.work_accommodations, item.label] });
                             }
                           }}
-                        />
-                        <div>
-                          <span className="block font-black text-gray-900 leading-none mb-1">
-                            {item.label}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {item.desc}
-                          </span>
-                        </div>
-                      </label>
-                    ))}
+                          className={`relative flex flex-col items-start gap-1 p-3.5 rounded-2xl border-2 text-left transition-all duration-150 cursor-pointer ${
+                            selected
+                              ? "bg-teal-500 border-teal-500 text-white shadow-md shadow-teal-500/25 scale-[1.02]"
+                              : "bg-white border-gray-100 hover:border-teal-300 hover:bg-teal-50/50 text-gray-700"
+                          }`}
+                        >
+                          <span className="text-xl leading-none">{item.icon}</span>
+                          <span className={`text-xs font-bold leading-tight ${selected ? "text-white" : "text-slate-800"}`}>{item.label}</span>
+                          <span className={`text-xs leading-tight ${selected ? "text-white/75" : "text-slate-400"}`}>{item.desc}</span>
+                          {selected && (
+                            <span className="absolute top-2 right-2 w-4 h-4 bg-white rounded-full flex items-center justify-center">
+                              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#0d9488" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
+                  {candidateData.work_accommodations.length > 0 && (
+                    <p className="mt-3 text-xs text-teal-600 font-semibold">
+                      ✓ {candidateData.work_accommodations.length} accommodation{candidateData.work_accommodations.length > 1 ? "s" : ""} selected
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -1448,12 +1453,60 @@ export default function Login() {
                 </div>
 
                 <div>
-                  <Input
-                    label="Key Skills"
-                    placeholder="e.g., React, Python, Communication (comma separated)"
-                    value={candidateData.key_skills.join(", ")}
-                    onChange={(e) => setCandidateData({...candidateData, key_skills: e.target.value.split(",").map(s => s.trim())})}
-                  />
+                  <label className="block text-sm font-black text-gray-700 mb-2">Key Skills</label>
+
+                  {candidateData.key_skills.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 min-h-12">
+                      {candidateData.key_skills.filter((s) => s).map((skill, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1.5 bg-white border border-indigo-100 text-indigo-700 rounded-full pl-3 pr-1.5 py-1 text-xs font-semibold shadow-sm">
+                          {skill}
+                          <button
+                            type="button"
+                            onClick={() => setCandidateData({ ...candidateData, key_skills: candidateData.key_skills.filter((_, i) => i !== idx) })}
+                            className="w-4 h-4 rounded-full bg-indigo-100 hover:bg-red-100 hover:text-red-600 flex items-center justify-center transition-colors text-indigo-400"
+                            aria-label={`Remove ${skill}`}
+                          >
+                            <svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none bg-white text-sm"
+                      placeholder="Type a skill and press Enter or +"
+                      value={skillInput}
+                      onChange={(e) => setSkillInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.key === "Enter" || e.key === ",") && skillInput.trim()) {
+                          e.preventDefault();
+                          const newSkill = skillInput.trim().replace(/,$/, "");
+                          if (newSkill && !candidateData.key_skills.includes(newSkill)) {
+                            setCandidateData({ ...candidateData, key_skills: [...candidateData.key_skills, newSkill] });
+                          }
+                          setSkillInput("");
+                        }
+                        if (e.key === "Backspace" && !skillInput && candidateData.key_skills.length > 0) {
+                          setCandidateData({ ...candidateData, key_skills: candidateData.key_skills.slice(0, -1) });
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newSkill = skillInput.trim();
+                        if (newSkill && !candidateData.key_skills.includes(newSkill)) {
+                          setCandidateData({ ...candidateData, key_skills: [...candidateData.key_skills, newSkill] });
+                        }
+                        setSkillInput("");
+                      }}
+                      className="w-10 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center transition-colors font-bold text-lg"
+                    >+</button>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1.5">Press Enter or comma to add • Backspace to remove last</p>
                 </div>
               </div>
             )}
@@ -1465,7 +1518,7 @@ export default function Login() {
                     Accessibility Needs
                   </label>
                   <textarea
-                    className="w-full px-5 py-4 border-2 border-gray-200 rounded-3xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white min-h-[120px]"
+                    className="w-full px-5 py-4 border-2 border-gray-200 rounded-3xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white min-h-30"
                     placeholder="Describe any specific accommodations you need..."
                     value={candidateData.accessibility_needs}
                     onChange={(e) =>
@@ -1492,7 +1545,7 @@ export default function Login() {
                   />
                   <label
                     htmlFor="profile-pic-upload"
-                    className="block p-8 border-2 border-dashed border-primary/30 rounded-[2rem] bg-primary/5 text-center cursor-pointer hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
+                    className="block p-8 border-2 border-dashed border-primary/30 rounded-4xl bg-primary/5 text-center cursor-pointer hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
                   >
                     <div className="w-16 h-16 bg-white rounded-3xl shadow-lg flex items-center justify-center mx-auto mb-4 text-primary group-hover:rotate-6 transition-transform">
                       <Upload size={32} />
@@ -1525,28 +1578,64 @@ export default function Login() {
                   </div>
                 )}
 
-                <div aria-live="polite" className="min-h-[80px]">
-                  <div className="space-y-4">
-                    <label className="block text-sm font-black text-gray-700">
-                      {t.extractedSkills}
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {candidateData.key_skills.length > 0 ? (
-                        candidateData.key_skills.map((skill, idx) => (
-                          <span
-                            key={idx}
-                            className="px-4 py-2 bg-white text-primary rounded-2xl text-xs font-black border-2 border-primary/20 flex items-center gap-2 shadow-sm"
-                          >
-                            {skill}{" "}
-                            <Check size={14} className="text-success-green" />
+                <div aria-live="polite" className="min-h-20">
+                  <div className="space-y-3">
+                    <label className="block text-sm font-black text-gray-700">{t.extractedSkills}</label>
+
+                    {candidateData.key_skills.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                        {candidateData.key_skills.filter((s) => s).map((skill, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1.5 bg-white border border-indigo-100 text-indigo-700 rounded-full pl-3 pr-1.5 py-1 text-xs font-semibold shadow-sm">
+                            {skill}
+                            <button
+                              type="button"
+                              onClick={() => setCandidateData({ ...candidateData, key_skills: candidateData.key_skills.filter((_, i) => i !== idx) })}
+                              className="w-4 h-4 rounded-full bg-indigo-100 hover:bg-red-100 hover:text-red-600 flex items-center justify-center transition-colors text-indigo-400"
+                              aria-label={`Remove ${skill}`}
+                            >
+                              <svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                            </button>
                           </span>
-                        ))
-                      ) : (
-                        <p className="text-gray-400 italic text-sm py-4">
-                          {t.uploadPrompt}
-                        </p>
-                      )}
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-gray-400 italic text-sm py-2">{t.uploadPrompt}</p>
+                    )}
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none bg-white text-sm"
+                        placeholder="Add a missing skill..."
+                        value={skillInput}
+                        onChange={(e) => setSkillInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if ((e.key === "Enter" || e.key === ",") && skillInput.trim()) {
+                            e.preventDefault();
+                            const newSkill = skillInput.trim().replace(/,$/, "");
+                            if (newSkill && !candidateData.key_skills.includes(newSkill)) {
+                              setCandidateData({ ...candidateData, key_skills: [...candidateData.key_skills, newSkill] });
+                            }
+                            setSkillInput("");
+                          }
+                          if (e.key === "Backspace" && !skillInput && candidateData.key_skills.length > 0) {
+                            setCandidateData({ ...candidateData, key_skills: candidateData.key_skills.slice(0, -1) });
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newSkill = skillInput.trim();
+                          if (newSkill && !candidateData.key_skills.includes(newSkill)) {
+                            setCandidateData({ ...candidateData, key_skills: [...candidateData.key_skills, newSkill] });
+                          }
+                          setSkillInput("");
+                        }}
+                        className="w-10 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center transition-colors font-bold text-lg"
+                      >+</button>
                     </div>
+                    <p className="text-xs text-slate-400">Press Enter or comma to add • Backspace to remove last</p>
                   </div>
                 </div>
               </div>
@@ -1567,7 +1656,7 @@ export default function Login() {
                     Tell us more about your inclusion strategy
                   </label>
                   <textarea
-                    className="w-full px-5 py-4 border-2 border-gray-200 rounded-3xl outline-none bg-white min-h-[100px] focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all"
+                    className="w-full px-5 py-4 border-2 border-gray-200 rounded-3xl outline-none bg-white min-h-25 focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all"
                     placeholder="We value diversity because..."
                     value={companyData.inclusion_strategy}
                     onChange={(e) => setCompanyData({...companyData, inclusion_strategy: e.target.value})}
@@ -1589,7 +1678,7 @@ export default function Login() {
                   />
                   <label
                     htmlFor="logo-upload"
-                    className="block p-8 border-2 border-dashed border-primary/30 rounded-[2rem] bg-primary/5 text-center cursor-pointer hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
+                    className="block p-8 border-2 border-dashed border-primary/30 rounded-4xl bg-primary/5 text-center cursor-pointer hover:bg-primary/10 hover:border-primary/50 transition-all focus-within:ring-4 ring-primary/20"
                   >
                     <div className="w-16 h-16 bg-white rounded-3xl shadow-lg flex items-center justify-center mx-auto mb-4 text-primary group-hover:rotate-6 transition-transform">
                       <Upload size={32} />
