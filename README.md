@@ -31,7 +31,7 @@ Contrairement aux plateformes classiques, InclusiveJobs utilise l'**Intelligence
 | **bcrypt + JWT**       | Authentification sécurisée                   |
 | **LangChain**          | Orchestration des agents IA                  |
 | **Gemini API**         | Intelligence Artificielle Générative         |
-| **Text-Embedding-004** | Embeddings vectoriels (Google)               |
+| **Text-Embedding-001** | Embeddings vectoriels (Google)               |
 | **FAISS**              | Base vectorielle pour le matching RAG        |
 | **pdfplumber**         | Extraction de texte des CV PDF               |
 

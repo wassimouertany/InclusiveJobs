@@ -134,7 +134,7 @@ async def get_company_logo(logo_id: str):
 @router.get("/")
 async def list_active_offers():
     """List all job offers with status 'open' (public)."""
-    cursor = db.job_offers.find({"status": "open"})
+    cursor = db.job_offers.find({"status": "open"}).sort("created_at", -1)
     offers = await cursor.to_list(length=100)
     for o in offers:
         o["_id"] = str(o["_id"])
@@ -320,6 +320,72 @@ async def update_offer_status(
     invalidate_offer_index_cache()
 
     return {"message": "Offer status updated.", "status": body.status.value}
+
+
+@router.patch("/{offer_id}")
+async def update_job_offer(
+    offer_id: str,
+    current_user: dict = Depends(get_current_recruiter),
+    title: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    required_skills: Optional[Json[list[str]]] = Form(None),
+    profile_title: Optional[str] = Form(None),
+    contract_type: Optional[ContractType] = Form(None),
+    key_skills: Optional[Json[list[str]]] = Form(None),
+    working_conditions: Optional[str] = Form(None),
+    possible_accommodations: Optional[str] = Form(None),
+    document: Optional[UploadFile] = File(None),
+):
+    """Update a job offer's details (recruiter only, owner of the offer). Accepts multipart/form-data; all fields optional."""
+    oid = _require_object_id(offer_id, "offer ID")
+
+    offer = await db.job_offers.find_one({"_id": oid})
+    if offer is None:
+        raise HTTPException(status_code=404, detail="Offer not found.")
+    if offer["recruiter_id"] != str(current_user["_id"]):
+        raise HTTPException(status_code=403, detail="You can only update your own offers.")
+
+    update: dict = {}
+    for field, value in [
+        ("title", title),
+        ("description", description),
+        ("profile_title", profile_title),
+        ("working_conditions", working_conditions),
+        ("possible_accommodations", possible_accommodations),
+    ]:
+        if value is not None:
+            update[field] = value
+
+    if required_skills is not None:
+        update["required_skills"] = required_skills
+    if key_skills is not None:
+        update["key_skills"] = key_skills
+    if contract_type is not None:
+        update["contract_type"] = contract_type.value
+
+    if document and document.filename:
+        old_doc_id = offer.get("document_id")
+        update["document_id"] = await upload_file_to_gridfs(document)
+        if old_doc_id:
+            try:
+                await fs.delete(ObjectId(str(old_doc_id)))
+            except (NoFile, Exception):
+                pass
+
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields provided to update.")
+
+    if "title" in update and not update["title"].strip():
+        raise HTTPException(status_code=400, detail="Title cannot be empty.")
+
+    await db.job_offers.update_one({"_id": oid}, {"$set": update})
+    invalidate_offer_index_cache()
+
+    updated = await db.job_offers.find_one({"_id": oid})
+    updated["_id"] = str(updated["_id"])
+    if updated.get("document_id") is not None:
+        updated["document_id"] = str(updated["document_id"])
+    return updated
 
 
 @router.post("/{offer_id}/save-candidate/{candidate_id}")

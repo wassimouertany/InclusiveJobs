@@ -21,6 +21,7 @@ import {
   CheckCircle,
   Cpu,
   Building2,
+  Loader2,
 } from "lucide-react";
 import { useAuthStore } from "../config/auth";
 import { apiClient } from "../services/apiClient";
@@ -425,7 +426,6 @@ export default function Login() {
     employee_count: 0,
     employees_with_disability: 0,
     inclusion_strategy: "",
-    website: "",
   });
   const [companyFiles, setCompanyFiles] = useState({
     logo: null as File | null,
@@ -1643,14 +1643,6 @@ export default function Login() {
 
             {step === 3 && role === UserRole.COMPANY && (
               <div className="space-y-6 text-left">
-                <Input 
-                  label="Company Website" 
-                  type="url" 
-                  placeholder="https://www.example.com" 
-                  value={companyData.website}
-                  onChange={(e) => setCompanyData({...companyData, website: e.target.value})}
-                />
-                
                 <div className="space-y-2">
                   <label className="block text-sm font-black text-gray-700">
                     Tell us more about your inclusion strategy
@@ -1725,9 +1717,17 @@ export default function Login() {
                 <Button
                   variant="secondary"
                   onClick={handleRegisterSubmit}
+                  disabled={isLoading}
                   className="w-72 py-4"
                 >
-                  {t.launch} <Check size={22} />
+                  {isLoading ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      Setting up…
+                    </>
+                  ) : (
+                    <>{t.launch} <Check size={22} /></>
+                  )}
                 </Button>
               )}
             </div>

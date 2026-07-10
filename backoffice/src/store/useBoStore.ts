@@ -43,7 +43,8 @@ function applyTheme(theme: ThemeMode) {
 }
 
 export const useBoStore = create<BoState>((set) => ({
-  isAuthenticated: sessionStorage.getItem("bo-auth") === "1",
+  isAuthenticated:
+    sessionStorage.getItem("bo-auth") === "1" && !!localStorage.getItem("bo_token"),
   users: initialUsers,
   jobs: initialJobs,
   applications: initialApplications,
@@ -59,6 +60,7 @@ export const useBoStore = create<BoState>((set) => ({
   },
   logout: () => {
     sessionStorage.removeItem("bo-auth");
+    localStorage.removeItem("bo_token");
     set({ isAuthenticated: false });
   },
   setTheme: (theme) => {

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from routes_admin import router as admin_router
 from routes_ai import router as ai_router
 from routes_applications import router as applications_router
 from routes_notifications import router as notifications_router
@@ -28,11 +29,14 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(admin_router)
 app.include_router(users_router)
 app.include_router(job_offers_router)
 app.include_router(ai_router)

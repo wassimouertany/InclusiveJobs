@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -14,6 +13,7 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  RefreshCw,
   Search,
   Send,
   Sparkles,
@@ -28,10 +28,7 @@ import { apiClient } from "../../services/apiClient";
 import { useCandidateDashboard } from "./CandidateDashboardContext";
 import { STATUS_CONFIG } from "../../types/application";
 import type { Application } from "../../types/application";
-import type {
-  AiMatchesForCandidateResponse,
-  JobOfferListItem,
-} from "./apiTypes";
+import type { JobOfferListItem } from "./apiTypes";
 import { selectedJobFromAiMatch } from "./selectedJobUtils";
 import {
   formatEnumLabel,
@@ -46,24 +43,6 @@ import type { CandidateProfile } from "./types";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function readErrorDetailFromResponseLike(
-  data: unknown,
-  statusText: string
-): string {
-  if (data !== null && typeof data === "object" && !Array.isArray(data)) {
-    const body = data as { detail?: unknown };
-    if (typeof body.detail === "string") return body.detail;
-    if (Array.isArray(body.detail)) {
-      return (
-        body.detail.map((e: { msg?: string }) => e.msg).filter(Boolean).join(", ") ||
-        "Request failed"
-      );
-    }
-    return "Request failed";
-  }
-  return statusText || "Request failed";
-}
 
 const LOGO_BG = [
   "bg-blue-600",
@@ -154,19 +133,37 @@ const NEED_CHIPS = [
 
 export default function CandidateHome() {
   const { showToast } = useToast();
-  const { displayName, setSelectedJob, profile } = useCandidateDashboard();
+  const {
+    displayName,
+    setSelectedJob,
+    profile,
+    aiMatches: matches,
+    aiMatchesLoading: loading,
+    aiMatchesOffersById: offersById,
+    fetchAiMatches,
+    homeScrollYRef,
+  } = useCandidateDashboard();
   const navigate = useNavigate();
 
-  // AI matches state (existing)
-  const [matches, setMatches] = useState<
-    AiMatchesForCandidateResponse["matches"] | null
-  >(null);
-  const [loading, setLoading] = useState(false);
-  const [offersById, setOffersById] = useState<Record<string, JobOfferListItem>>({});
+  // Restore scroll position on mount (e.g. returning from an offer detail view)
+  // and keep it updated while this page is visible.
+  useEffect(() => {
+    if (homeScrollYRef.current > 0) {
+      window.scrollTo(0, homeScrollYRef.current);
+    }
+    const onScroll = () => {
+      homeScrollYRef.current = window.scrollY;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [homeScrollYRef]);
 
   // Applications state (new)
   const [applications, setApplications] = useState<Application[]>([]);
   const [appsLoading, setAppsLoading] = useState(true);
+
+  // Open offers count
+  const [openOffersCount, setOpenOffersCount] = useState<number | null>(null);
 
   const profileCompletion = useMemo(() => computeProfileCompletion(profile), [profile]);
   const firstName = profile?.first_name?.trim() || displayName;
@@ -175,6 +172,18 @@ export default function CandidateHome() {
     () => normalizeToStringArray(profile?.key_skills),
     [profile?.key_skills]
   );
+
+  // Fetch open offers count once on mount
+  useEffect(() => {
+    apiClient
+      .get<JobOfferListItem[]>("/job-offers/", { validateStatus: () => true })
+      .then((res) => {
+        if (res.status >= 200 && res.status < 300) {
+          setOpenOffersCount(res.data.length);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch applications once on mount
   useEffect(() => {
@@ -189,54 +198,6 @@ export default function CandidateHome() {
       .catch(() => {})
       .finally(() => setAppsLoading(false));
   }, []);
-
-  // Fetch AI matches (existing)
-  const fetchAiMatches = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await apiClient.get<AiMatchesForCandidateResponse>(
-        "/ai/matches/for-candidate",
-        { validateStatus: () => true }
-      );
-      if (res.status < 200 || res.status >= 300) {
-        showToast(
-          readErrorDetailFromResponseLike(res.data, res.statusText),
-          "error"
-        );
-        return;
-      }
-      const fetched = res.data.matches ?? [];
-      setMatches(fetched);
-      if (fetched.some((m: { ai_score?: number; vector_score?: number }) =>
-        (typeof m.ai_score === "number" ? m.ai_score : (m.vector_score ?? 0)) >= 90
-      )) {
-        apiClient.post("/badges/award/highly_matched").catch(() => {});
-      }
-    } catch {
-      showToast("Could not load AI recommendations. Is the API running?", "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
-
-  // Load offer details for match cards (existing)
-  useEffect(() => {
-    if (!matches?.length) {
-      setOffersById({});
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const res = await apiClient.get<JobOfferListItem[]>("/job-offers/", {
-        validateStatus: () => true,
-      });
-      if (cancelled || res.status < 200 || res.status >= 300 || !Array.isArray(res.data)) return;
-      const map: Record<string, JobOfferListItem> = {};
-      for (const o of res.data) map[o._id] = o;
-      setOffersById(map);
-    })();
-    return () => { cancelled = true; };
-  }, [matches]);
 
   const handleApply = (e: MouseEvent) => {
     e.stopPropagation();
@@ -319,7 +280,7 @@ export default function CandidateHome() {
           },
           {
             label: "Available Offers",
-            value: "1,200+",
+            value: openOffersCount === null ? "—" : openOffersCount,
             Icon: Briefcase,
             iconBg: "bg-amber-50",
             iconColor: "text-amber-600",
@@ -366,9 +327,26 @@ export default function CandidateHome() {
       {/* 4. AI MATCHES SECTION                                                */}
       {/* ------------------------------------------------------------------ */}
       <div>
-        <h3 className="text-xl font-bold text-gray-900 mb-4">
-          Recommended for you
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold text-gray-900">
+            Recommended for you
+          </h3>
+          {matches && matches.length > 0 && (
+            <button
+              type="button"
+              onClick={() => fetchAiMatches()}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+              Refresh matches
+            </button>
+          )}
+        </div>
 
         <AnimatePresence mode="wait">
           {loading ? (

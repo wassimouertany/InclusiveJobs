@@ -7,7 +7,6 @@ import {
   FileText,
   Building2,
   Settings,
-  Sparkles,
   Menu,
   X,
   LogOut,
@@ -49,8 +48,8 @@ export default function Sidebar() {
   const navContent = (
     <>
       <div className={`bo-sidebar-brand ${compactSidebar ? "is-compact" : ""}`}>
-        <div className="bo-brand-icon">
-          <Sparkles className="w-4 h-4" />
+        <div className="bo-brand-icon" style={{ background: "transparent", padding: 0, overflow: "hidden" }}>
+          <img src="/logo.png" alt="InclusiveJobs logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
         </div>
         {!compactSidebar && (
           <div>
@@ -72,7 +71,7 @@ export default function Sidebar() {
 
       <div className="bo-sidebar-footer">
         {!compactSidebar && (
-          <div className="bo-demo-pill">Live demo · fake data only</div>
+          <div className="bo-demo-pill">Live · connected to backend</div>
         )}
         <button
           type="button"
