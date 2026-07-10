@@ -11,9 +11,9 @@
   --bo-text: #0f1419;
   --bo-muted: #5c6573;
   --bo-line: #e2e0da;
-  --bo-brand: #5b4cff;
-  --bo-brand-dark: #4338ca;
-  --bo-brand-soft: #ede9fe;
+  --bo-brand: #0D9488;
+  --bo-brand-dark: #0F766E;
+  --bo-brand-soft: #CCFBF1;
   --bo-success: #0d9f6e;
   --bo-success-soft: #d1fae5;
   --bo-warning: #d97706;
@@ -37,9 +37,9 @@
   --bo-text: #f1f5f9;
   --bo-muted: #94a3b8;
   --bo-line: #2d3748;
-  --bo-brand: #a89bff;
-  --bo-brand-dark: #8b7cf8;
-  --bo-brand-soft: #2e2649;
+  --bo-brand: #2DD4BF;
+  --bo-brand-dark: #14B8A6;
+  --bo-brand-soft: #134E4A;
   --bo-success-soft: #064e3b;
   --bo-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.5);
 }
@@ -1050,3 +1050,5 @@ select:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+@keyframes spin { to { transform: rotate(360deg); } }

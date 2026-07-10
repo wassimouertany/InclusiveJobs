@@ -4,18 +4,24 @@ import Card from "./Card";
 interface StatCardProps {
   label: string;
   value: string;
-  delta: string;
+  delta?: string;
+  subtitle?: string;
   tone?: "success" | "neutral" | "warning";
   icon: LucideIcon;
 }
 
-export default function StatCard({ label, value, delta, tone = "success", icon: Icon }: StatCardProps) {
+export default function StatCard({
+  label,
+  value,
+  delta,
+  subtitle,
+  tone = "success",
+  icon: Icon,
+}: StatCardProps) {
   const deltaClass =
-    tone === "warning"
+    tone === "warning" || tone === "neutral"
       ? "bo-stat-delta--neutral"
-      : tone === "neutral"
-        ? "bo-stat-delta--neutral"
-        : "bo-stat-delta--up";
+      : "bo-stat-delta--up";
 
   return (
     <Card className="bo-stat-card">
@@ -28,7 +34,11 @@ export default function StatCard({ label, value, delta, tone = "success", icon: 
         </span>
       </div>
       <p className="bo-stat-value">{value}</p>
-      <p className={`bo-stat-delta ${deltaClass}`}>{delta} vs last period</p>
+      {subtitle != null ? (
+        <p className={`bo-stat-delta ${deltaClass}`}>{subtitle}</p>
+      ) : delta != null ? (
+        <p className={`bo-stat-delta ${deltaClass}`}>{delta} vs last period</p>
+      ) : null}
     </Card>
   );
 }

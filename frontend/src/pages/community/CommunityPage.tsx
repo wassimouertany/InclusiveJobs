@@ -157,7 +157,30 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-function CompanyAvatar({ name, size = "w-12 h-12" }: { name: string; size?: string }) {
+function CompanyAvatar({
+  recruiterId,
+  logoId,
+  name,
+  size = "w-12 h-12",
+}: {
+  recruiterId: string;
+  logoId: string | null;
+  name: string;
+  size?: string;
+}) {
+  const [err, setErr] = useState(false);
+
+  if (logoId && !err) {
+    return (
+      <img
+        src={`${API_BASE_URL}/users/recruiters/${recruiterId}/logo`}
+        alt={name}
+        className={`${size} rounded-full object-cover shrink-0`}
+        onError={() => setErr(true)}
+      />
+    );
+  }
+
   return (
     <div className={`${size} rounded-full bg-linear-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shrink-0`}>
       {nameInitials(name)}
@@ -619,7 +642,7 @@ function ChampionsTab({
           >
             <div className="flex flex-col items-center text-center gap-3">
               <div className="relative">
-                <CompanyAvatar name={r.company_name} size="w-16 h-16" />
+                <CompanyAvatar recruiterId={r._id} logoId={r.logo_id} name={r.company_name} size="w-16 h-16" />
                 <span className="absolute -top-2 -right-2 text-xl">{PODIUM_MEDAL[i]}</span>
               </div>
               <div>
@@ -650,7 +673,7 @@ function ChampionsTab({
               <span className="text-white/30 font-bold text-lg w-8 shrink-0 text-center">
                 {i + 4}
               </span>
-              <CompanyAvatar name={r.company_name} size="w-10 h-10" />
+              <CompanyAvatar recruiterId={r._id} logoId={r.logo_id} name={r.company_name} size="w-10 h-10" />
               <div className="min-w-0 flex-1">
                 <p className="text-white font-semibold text-sm truncate">{r.company_name}</p>
                 <p className="text-white/40 text-xs truncate">{r.company_industry}</p>

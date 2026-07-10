@@ -1,8 +1,9 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useBoStore } from "../store/useBoStore";
 
-export default function ProtectedRoute() {
+export default function ProtectedRoute({ children }: { children?: React.ReactNode }) {
   const isAuthenticated = useBoStore((s) => s.isAuthenticated);
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  return <Outlet />;
+  const token = localStorage.getItem("bo_token");
+  if (!isAuthenticated || !token) return <Navigate to="/login" replace />;
+  return children ? <>{children}</> : <Outlet />;
 }

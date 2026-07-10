@@ -729,6 +729,57 @@ async def get_my_recruiter_profile(current_user: dict = Depends(get_current_recr
     return current_user
 
 
+@router.patch("/recruiters/me")
+async def update_recruiter_profile(
+    current_user: dict = Depends(get_current_recruiter),
+    company_name: Optional[str] = Form(None),
+    company_industry: Optional[str] = Form(None),
+    phone_number: Optional[str] = Form(None),
+    location: Optional[str] = Form(None),
+    founded_year: Optional[int] = Form(None),
+    employee_count: Optional[int] = Form(None),
+    employees_with_disability: Optional[int] = Form(None),
+    inclusion_strategy: Optional[str] = Form(None),
+    logo: Optional[UploadFile] = File(None),
+):
+    """Update the currently authenticated recruiter's profile. All fields optional."""
+    recruiter_id = current_user["_id"]
+    update: dict = {}
+
+    for field, value in [
+        ("company_name", company_name),
+        ("company_industry", company_industry),
+        ("phone_number", phone_number),
+        ("location", location),
+        ("inclusion_strategy", inclusion_strategy),
+    ]:
+        if value is not None:
+            update[field] = value.strip() if isinstance(value, str) else value
+
+    if founded_year is not None:
+        update["founded_year"] = founded_year
+    if employee_count is not None:
+        update["employee_count"] = employee_count
+    if employees_with_disability is not None:
+        update["employees_with_disability"] = employees_with_disability
+
+    if logo and logo.filename:
+        update["logo_id"] = await upload_file_to_gridfs(logo)
+
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields provided to update.")
+
+    if "company_name" in update and not update["company_name"]:
+        raise HTTPException(status_code=400, detail="Company name cannot be empty.")
+
+    await db.recruiters.update_one({"_id": recruiter_id}, {"$set": update})
+
+    updated = await db.recruiters.find_one({"_id": recruiter_id})
+    updated["_id"] = str(updated["_id"])
+    updated.pop("password", None)
+    return updated
+
+
 @router.get("/recruiters/me/logo")
 async def get_my_recruiter_logo(current_user: dict = Depends(get_current_recruiter)):
     """Stream the recruiter's company logo from GridFS (JWT required)."""

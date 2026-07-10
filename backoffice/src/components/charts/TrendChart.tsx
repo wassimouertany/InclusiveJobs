@@ -1,9 +1,14 @@
 import { useId, useMemo } from "react";
-import type { ChartPoint } from "../../types";
+
+interface TrendPoint {
+  date: string;
+  value: number;
+}
 
 interface TrendChartProps {
-  data: ChartPoint[];
-  metric?: "applications" | "users";
+  data: TrendPoint[];
+  color?: string;
+  label?: string;
 }
 
 function smoothPath(coords: { x: number; y: number }[]): string {
@@ -19,10 +24,13 @@ function smoothPath(coords: { x: number; y: number }[]): string {
   }, "");
 }
 
-export default function TrendChart({ data, metric = "applications" }: TrendChartProps) {
+export default function TrendChart({
+  data,
+  color = "#5b4cff",
+  label = "Trend",
+}: TrendChartProps) {
   const uid = useId().replace(/:/g, "");
   const fillId = `boChartFill-${uid}`;
-  const strokeId = `boChartStroke-${uid}`;
   const glowId = `boChartGlow-${uid}`;
 
   const w = 640;
@@ -34,7 +42,7 @@ export default function TrendChart({ data, metric = "applications" }: TrendChart
   const chartH = h - padY * 2;
 
   const { coords, values, yLabels } = useMemo(() => {
-    const vals = data.map((d) => (metric === "users" ? d.users : d.applications));
+    const vals = data.map((d) => d.value);
     const max = Math.max(...vals, 1);
     const min = Math.min(...vals);
     const range = max - min || 1;
@@ -52,7 +60,7 @@ export default function TrendChart({ data, metric = "applications" }: TrendChart
     }));
 
     return { coords: pts, values: vals, yLabels: labels };
-  }, [data, metric, chartW, chartH, padL, padY]);
+  }, [data, chartW, chartH, padL, padY]);
 
   const linePath = smoothPath(coords);
   const baseY = padY + chartH;
@@ -68,9 +76,7 @@ export default function TrendChart({ data, metric = "applications" }: TrendChart
     <div className="bo-chart-wrap">
       <div className="bo-chart-summary">
         <div>
-          <p className="bo-chart-summary-label">
-            {metric === "users" ? "Active users" : "Applications"}
-          </p>
+          <p className="bo-chart-summary-label">{label}</p>
           <p className="bo-chart-summary-value">{latest.toLocaleString()}</p>
         </div>
         <span className={`bo-chart-change ${Number(change) >= 0 ? "is-up" : "is-down"}`}>
@@ -82,19 +88,13 @@ export default function TrendChart({ data, metric = "applications" }: TrendChart
         viewBox={`0 0 ${w} ${h}`}
         className="bo-chart-svg"
         role="img"
-        aria-label={`Trend chart showing ${metric} over time`}
+        aria-label={`Trend chart showing ${label.toLowerCase()} over time`}
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
           <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#5b4cff" stopOpacity="0.45" />
-            <stop offset="55%" stopColor="#8b7cf8" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="#5b4cff" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id={strokeId} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#4338ca" />
-            <stop offset="50%" stopColor="#5b4cff" />
-            <stop offset="100%" stopColor="#a78bfa" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
           <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="2" result="blur" />
@@ -116,14 +116,14 @@ export default function TrendChart({ data, metric = "applications" }: TrendChart
           />
         ))}
 
-        {yLabels.map((label) => (
+        {yLabels.map((lbl) => (
           <text
-            key={label.value}
+            key={lbl.value}
             x={w - padR + 10}
-            y={label.y + 4}
+            y={lbl.y + 4}
             className="bo-chart-axis-label"
           >
-            {label.value}
+            {lbl.value}
           </text>
         ))}
 
@@ -131,7 +131,7 @@ export default function TrendChart({ data, metric = "applications" }: TrendChart
         <path
           d={linePath}
           fill="none"
-          stroke={`url(#${strokeId})`}
+          stroke={color}
           strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -142,7 +142,7 @@ export default function TrendChart({ data, metric = "applications" }: TrendChart
         {coords.map((p, i) => (
           <g key={i} className="bo-chart-point">
             <circle cx={p.x} cy={p.y} r="10" className="bo-chart-point-halo" />
-            <circle cx={p.x} cy={p.y} r="4.5" className="bo-chart-point-dot" />
+            <circle cx={p.x} cy={p.y} r="4.5" fill={color} className="bo-chart-point-dot" />
           </g>
         ))}
       </svg>

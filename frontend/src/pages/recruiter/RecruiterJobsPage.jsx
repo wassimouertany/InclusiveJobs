@@ -76,6 +76,7 @@ function CandidateShortlistAvatar({ candidateId, name }) {
 export default function RecruiterJobsPage() {
   const navigate = useNavigate();
   const [isCreatingJob, setIsCreatingJob] = useState(false);
+  const [editingOfferId, setEditingOfferId] = useState(null);
   const [offers, setOffers] = useState([]);
   const [offersLoading, setOffersLoading] = useState(false);
   const [offerDetail, setOfferDetail] = useState(null);
@@ -85,6 +86,7 @@ export default function RecruiterJobsPage() {
   const [copiedCandidateId, setCopiedCandidateId] = useState(null);
   const [removingSavedId, setRemovingSavedId] = useState(null);
   const [shortlistRemoveConfirm, setShortlistRemoveConfirm] = useState(null);
+  const [deleteOfferConfirm, setDeleteOfferConfirm] = useState(null);
   const [isSubmittingOffer, setIsSubmittingOffer] = useState(false);
   const [offerForm, setOfferForm] = useState({
     title: "",
@@ -127,6 +129,20 @@ export default function RecruiterJobsPage() {
       document.body.style.overflow = prev;
     };
   }, [shortlistRemoveConfirm]);
+
+  useEffect(() => {
+    if (!deleteOfferConfirm) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setDeleteOfferConfirm(null);
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [deleteOfferConfirm]);
 
   const goToAiMatch = (offerId) => {
     navigate(`/dashboard/recruiter/matches?offer=${encodeURIComponent(offerId)}`);
@@ -273,10 +289,11 @@ export default function RecruiterJobsPage() {
     }
   };
 
-  const confirmDeleteOffer = async (offerId) => {
-    if (!window.confirm("Delete this job offer permanently? This cannot be undone.")) {
-      return;
-    }
+  const requestDeleteOffer = (offer) => {
+    setDeleteOfferConfirm({ offerId: offer._id, title: (offer.title || "").trim() || "this offer" });
+  };
+
+  const performDeleteOffer = async (offerId) => {
     setDeletingOfferId(offerId);
     try {
       const response = await apiClient.delete(`/job-offers/${offerId}`, {
@@ -299,23 +316,48 @@ export default function RecruiterJobsPage() {
     }
   };
 
+  const resetOfferForm = () => ({
+    title: "",
+    profile_title: "",
+    description: "",
+    contract_type: "permanent",
+    required_skills: [],
+    key_skills: [],
+    working_conditions: "",
+    possible_accommodations: "",
+    document: null,
+  });
+
   const openCreateOffer = () => {
     setOfferDetail(null);
+    setEditingOfferId(null);
+    setOfferForm(resetOfferForm());
+    setIsCreatingJob(true);
+  };
+
+  const openEditOffer = (offer) => {
+    setOfferDetail(null);
+    setEditingOfferId(offer._id);
     setOfferForm({
-      title: "",
-      profile_title: "",
-      description: "",
-      contract_type: "permanent",
-      required_skills: [],
-      key_skills: [],
-      working_conditions: "",
-      possible_accommodations: "",
+      title: offer.title || "",
+      profile_title: offer.profile_title || "",
+      description: offer.description || "",
+      contract_type: offer.contract_type || "permanent",
+      required_skills: Array.isArray(offer.required_skills) ? offer.required_skills : [],
+      key_skills: Array.isArray(offer.key_skills) ? offer.key_skills : [],
+      working_conditions: offer.working_conditions || "",
+      possible_accommodations: offer.possible_accommodations || "",
       document: null,
     });
     setIsCreatingJob(true);
   };
 
-  const handleSubmitCreateOffer = async () => {
+  const closeOfferForm = () => {
+    setIsCreatingJob(false);
+    setEditingOfferId(null);
+  };
+
+  const handleSubmitOfferForm = async () => {
     const title = offerForm.title.trim();
     const description = normalizeRichTextHtml(offerForm.description);
     if (!title) {
@@ -323,6 +365,7 @@ export default function RecruiterJobsPage() {
       return;
     }
 
+    const isEditing = Boolean(editingOfferId);
     setIsSubmittingOffer(true);
     try {
       const formData = new FormData();
@@ -341,9 +384,13 @@ export default function RecruiterJobsPage() {
         formData.append("document", offerForm.document);
       }
 
-      const response = await apiClient.post("/job-offers/", formData, {
-        validateStatus: () => true,
-      });
+      const response = isEditing
+        ? await apiClient.patch(`/job-offers/${editingOfferId}`, formData, {
+            validateStatus: () => true,
+          })
+        : await apiClient.post("/job-offers/", formData, {
+            validateStatus: () => true,
+          });
 
       if (response.status < 200 || response.status >= 300) {
         showToast(
@@ -353,11 +400,17 @@ export default function RecruiterJobsPage() {
         return;
       }
 
-      showToast("Job offer published successfully.", "success");
-      setIsCreatingJob(false);
+      showToast(
+        isEditing ? "Job offer updated successfully." : "Job offer published successfully.",
+        "success"
+      );
+      closeOfferForm();
       await loadOffers();
     } catch {
-      showToast("Could not create offer. Please try again.", "error");
+      showToast(
+        isEditing ? "Could not update offer. Please try again." : "Could not create offer. Please try again.",
+        "error"
+      );
     } finally {
       setIsSubmittingOffer(false);
     }
@@ -382,18 +435,21 @@ export default function RecruiterJobsPage() {
   };
 
   const renderJobs = () => {
-    // ── Create form ─────────────────────────────────────────────────────────
+    // ── Create / edit form ──────────────────────────────────────────────────
     if (isCreatingJob) {
+      const isEditing = Boolean(editingOfferId);
       return (
         <div className="bg-white p-8 rounded-2xl border border-border shadow-sm animate-in fade-in zoom-in-95 duration-200">
           <button
             type="button"
-            onClick={() => setIsCreatingJob(false)}
+            onClick={closeOfferForm}
             className="text-primary font-bold flex items-center gap-2 mb-6 hover:underline"
           >
             <ChevronLeft size={20} /> Back to jobs
           </button>
-          <h3 className="text-2xl font-bold text-gray-900 mb-6">Create New Job Offer</h3>
+          <h3 className="text-2xl font-bold text-gray-900 mb-6">
+            {isEditing ? "Edit Job Offer" : "Create New Job Offer"}
+          </h3>
           <div className="space-y-6">
             <Input
               label="Job Title"
@@ -484,19 +540,24 @@ export default function RecruiterJobsPage() {
                 }
                 className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl bg-white text-gray-900 focus:border-primary outline-none"
               />
-              {offerForm.document && (
+              {offerForm.document ? (
                 <p className="text-xs text-gray-500">Selected: {offerForm.document.name}</p>
-              )}
+              ) : isEditing ? (
+                <p className="text-xs text-gray-500">Leave empty to keep the current document.</p>
+              ) : null}
             </div>
             <div className="flex justify-end gap-4 mt-8">
-              <Button variant="outline" onClick={() => setIsCreatingJob(false)}>
+              <Button variant="outline" onClick={closeOfferForm}>
                 Cancel
               </Button>
-              <Button onClick={handleSubmitCreateOffer} disabled={isSubmittingOffer}>
+              <Button onClick={handleSubmitOfferForm} disabled={isSubmittingOffer}>
                 {isSubmittingOffer ? (
                   <>
-                    <Loader2 className="animate-spin" size={18} /> Publishing...
+                    <Loader2 className="animate-spin" size={18} />
+                    {isEditing ? "Saving..." : "Publishing..."}
                   </>
+                ) : isEditing ? (
+                  "Save Changes"
                 ) : (
                   "Publish Offer"
                 )}
@@ -597,9 +658,17 @@ export default function RecruiterJobsPage() {
                 <Button
                   type="button"
                   variant="outline"
+                  className="text-slate-600 border-slate-200 hover:bg-slate-50 flex items-center gap-2"
+                  onClick={() => openEditOffer(d)}
+                >
+                  <Edit size={16} /> Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
                   className="text-red-600 border-red-200 hover:bg-red-50"
                   disabled={deletingOfferId === d._id}
-                  onClick={() => confirmDeleteOffer(d._id)}
+                  onClick={() => requestDeleteOffer(d)}
                 >
                   {deletingOfferId === d._id ? (
                     <Loader2 className="animate-spin" size={18} />
@@ -876,14 +945,14 @@ export default function RecruiterJobsPage() {
                       <Users size={15} /> Applications
                     </button>
                     <button
-                      disabled
-                      title="Edit soon"
-                      className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-2.5 text-slate-500 hover:text-slate-700 transition-colors disabled:opacity-40"
+                      onClick={() => openEditOffer(job)}
+                      title="Edit offer"
+                      className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-2.5 text-slate-500 hover:text-slate-700 transition-colors"
                     >
                       <Edit size={16} />
                     </button>
                     <button
-                      onClick={() => confirmDeleteOffer(job._id)}
+                      onClick={() => requestDeleteOffer(job)}
                       disabled={deletingOfferId === job._id}
                       className="bg-white border border-red-100 hover:bg-red-50 rounded-xl p-2.5 text-red-400 hover:text-red-600 transition-colors disabled:opacity-50"
                       title="Delete offer"
@@ -995,6 +1064,92 @@ export default function RecruiterJobsPage() {
       document.body
     );
 
+  // ── Delete offer confirmation modal ──────────────────────────────────────
+  const deleteOfferModal =
+    deleteOfferConfirm &&
+    createPortal(
+      <div
+        className="fixed inset-0 z-110 flex items-end justify-center p-4 sm:items-center sm:p-6"
+        role="presentation"
+      >
+        <button
+          type="button"
+          className="absolute inset-0 bg-gray-900/50 backdrop-blur-[2px] transition-opacity"
+          aria-label="Close dialog"
+          onClick={() => setDeleteOfferConfirm(null)}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-offer-title"
+          className="relative w-full max-w-md overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-2xl shadow-gray-900/20"
+        >
+          <div className="border-b border-red-100 bg-linear-to-r from-red-50/90 to-rose-50/50 px-6 py-4">
+            <div className="flex items-start gap-3">
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700 ring-1 ring-red-200/80"
+                aria-hidden
+              >
+                <Trash2 className="h-5 w-5" strokeWidth={2.25} />
+              </div>
+              <div className="min-w-0 pt-0.5">
+                <h2
+                  id="delete-offer-title"
+                  className="text-lg font-bold tracking-tight text-gray-900"
+                >
+                  Delete this job offer?
+                </h2>
+                <p className="mt-1 text-sm text-red-950/70">
+                  This action is permanent and cannot be undone.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-6 py-5">
+            <p className="text-sm leading-relaxed text-gray-700">
+              <span className="font-semibold text-gray-900">"{deleteOfferConfirm.title}"</span>
+              {" and all of its applications, AI matches, and saved candidates will be permanently removed."}
+            </p>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/80 px-6 py-4 sm:flex-row sm:justify-end sm:gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full border-gray-300 text-gray-800 hover:bg-white sm:w-auto"
+              onClick={() => setDeleteOfferConfirm(null)}
+            >
+              Cancel
+            </Button>
+            <button
+              type="button"
+              disabled={deletingOfferId === deleteOfferConfirm.offerId}
+              onClick={() => {
+                const p = deleteOfferConfirm;
+                setDeleteOfferConfirm(null);
+                performDeleteOffer(p.offerId);
+              }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-transparent bg-red-600 px-6 py-3 text-sm font-bold text-white shadow-md transition-all hover:bg-red-700 focus:ring-4 focus:ring-red-300/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {deletingOfferId === deleteOfferConfirm.offerId ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 size={18} strokeWidth={2.25} />
+                  Delete permanently
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+
   return (
     <>
       <motion.div
@@ -1010,6 +1165,7 @@ export default function RecruiterJobsPage() {
         {renderJobs()}
       </motion.div>
       {shortlistRemoveModal}
+      {deleteOfferModal}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import PageShell from "../../components/layout/PageShell";
 import SearchInput from "../../components/ui/SearchInput";
 import FilterChips from "../../components/ui/FilterChips";
@@ -6,50 +6,79 @@ import DataTable, { type Column } from "../../components/ui/DataTable";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Drawer from "../../components/ui/Drawer";
-import { useFakeSearch } from "../../hooks/useFakeSearch";
-import { useBoStore } from "../../store/useBoStore";
+import Skeleton from "../../components/ui/Skeleton";
 import { useToast } from "../../app/ToastContext";
-import type { BoJob, JobStatus } from "../../types";
 import { formatDate } from "../../utils/formatDate";
+import {
+  fetchJobs,
+  setJobStatus,
+  type RealJob,
+} from "../../services/adminApi";
+
+function fmtType(value: string | undefined): string {
+  if (!value) return "—";
+  return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default function JobsPage() {
-  const jobs = useBoStore((s) => s.jobs);
-  const setJobStatus = useBoStore((s) => s.setJobStatus);
   const { showToast } = useToast();
+
+  const [jobs, setJobs] = useState<RealJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [selected, setSelected] = useState<BoJob | null>(null);
+  const [selected, setSelected] = useState<RealJob | null>(null);
 
-  const { query, setQuery, filtered: searched } = useFakeSearch(jobs, (j, q) =>
-    [j.title, j.company, j.location, j.type].join(" ").toLowerCase().includes(q),
-  );
+  useEffect(() => {
+    fetchJobs()
+      .then(setJobs)
+      .catch(() => showToast("Failed to load jobs", "error"))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const filtered = useMemo(
-    () =>
-      searched.filter((j) => {
-        if (statusFilter !== "all" && j.status !== statusFilter) return false;
-        if (typeFilter !== "all" && j.type !== typeFilter) return false;
-        return true;
-      }),
-    [searched, statusFilter, typeFilter],
-  );
+  const filtered = jobs.filter((j) => {
+    const matchQuery =
+      !query ||
+      `${j.title} ${j.company_name ?? ""}`.toLowerCase().includes(query.toLowerCase());
+    const matchStatus = statusFilter === "all" || j.status === statusFilter;
+    return matchQuery && matchStatus;
+  });
 
-  const types = useMemo(() => ["all", ...new Set(jobs.map((j) => j.type))], [jobs]);
+  async function updateStatus(job: RealJob, status: string) {
+    try {
+      await setJobStatus(job._id, status);
+      setJobs((prev) => prev.map((j) => (j._id === job._id ? { ...j, status } : j)));
+      if (selected?._id === job._id) setSelected({ ...job, status });
+      showToast(`"${job.title}" set to ${status}`);
+    } catch {
+      showToast("Failed to update job status", "error");
+    }
+  }
 
-  const updateStatus = (job: BoJob, status: JobStatus) => {
-    setJobStatus(job.id, status);
-    showToast(`Job ${job.id} set to ${status} (demo)`);
-    setSelected({ ...job, status });
-  };
-
-  const columns: Column<BoJob>[] = [
-    { key: "id", header: "ID", render: (j) => j.id },
-    { key: "title", header: "Title", render: (j) => <span className="font-semibold">{j.title}</span> },
-    { key: "company", header: "Company", render: (j) => j.company },
-    { key: "location", header: "Location", render: (j) => j.location },
-    { key: "type", header: "Type", render: (j) => j.type },
+  const columns: Column<RealJob>[] = [
+    {
+      key: "id",
+      header: "ID",
+      render: (j) => (
+        <span style={{ fontFamily: "monospace", fontSize: "0.8rem", color: "var(--bo-muted)" }}>
+          {j._id.slice(-6).toUpperCase()}
+        </span>
+      ),
+    },
+    {
+      key: "title",
+      header: "Title",
+      render: (j) => <span style={{ fontWeight: 600 }}>{j.title}</span>,
+    },
+    { key: "company", header: "Company", render: (j) => j.company_name ?? "—" },
+    { key: "location", header: "Location", render: (j) => j.location ?? "—" },
+    { key: "type", header: "Type", render: (j) => fmtType(j.contract_type) },
     { key: "status", header: "Status", render: (j) => <Badge value={j.status} /> },
-    { key: "posted", header: "Posted", render: (j) => formatDate(j.postedAt) },
+    {
+      key: "posted",
+      header: "Posted",
+      render: (j) => (j.created_at ? formatDate(j.created_at) : "—"),
+    },
     {
       key: "actions",
       header: "Actions",
@@ -58,19 +87,24 @@ export default function JobsPage() {
           <Button variant="ghost" onClick={() => setSelected(j)}>
             View
           </Button>
-          {j.status !== "open" && (
-            <Button variant="ghost" onClick={() => updateStatus(j, "open")}>
-              Open
-            </Button>
-          )}
-          {j.status !== "closed" && (
+          {j.status === "open" && (
             <Button variant="ghost" onClick={() => updateStatus(j, "closed")}>
               Close
             </Button>
           )}
-          {j.status !== "archived" && (
-            <Button variant="ghost" onClick={() => updateStatus(j, "archived")}>
-              Archive
+          {j.status === "closed" && (
+            <>
+              <Button variant="ghost" onClick={() => updateStatus(j, "open")}>
+                Open
+              </Button>
+              <Button variant="ghost" onClick={() => updateStatus(j, "archived")}>
+                Archive
+              </Button>
+            </>
+          )}
+          {j.status === "archived" && (
+            <Button variant="ghost" onClick={() => updateStatus(j, "open")}>
+              Open
             </Button>
           )}
         </div>
@@ -79,9 +113,9 @@ export default function JobsPage() {
   ];
 
   return (
-    <PageShell title="Jobs" subtitle="Manage job offers and publication status">
+    <PageShell title="Jobs" subtitle="Manage job offers and publication status.">
       <div className="bo-toolbar">
-        <SearchInput value={query} onChange={setQuery} placeholder="    Search jobs..." />
+        <SearchInput value={query} onChange={setQuery} placeholder="Search jobs…" />
         <FilterChips
           label="Status"
           value={statusFilter}
@@ -91,49 +125,48 @@ export default function JobsPage() {
             { label: "Open", value: "open" },
             { label: "Closed", value: "closed" },
             { label: "Archived", value: "archived" },
-            { label: "Draft", value: "draft" },
           ]}
-        />
-        <FilterChips
-          label="Type"
-          value={typeFilter}
-          onChange={setTypeFilter}
-          options={types.map((t) => ({ label: t === "all" ? "All" : t, value: t }))}
         />
       </div>
 
-      <DataTable columns={columns} rows={filtered} rowKey={(j) => j.id} />
+      {loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-12" />
+          ))}
+        </div>
+      ) : (
+        <DataTable columns={columns} rows={filtered} rowKey={(j) => j._id} />
+      )}
 
-      <Drawer open={!!selected} title={selected?.title ?? "Job detail"} onClose={() => setSelected(null)}>
+      <Drawer
+        open={!!selected}
+        title={selected?.title ?? "Job detail"}
+        onClose={() => setSelected(null)}
+      >
         {selected && (
           <div className="space-y-4 text-sm">
-            <p>
-              <strong>Company:</strong> {selected.company}
-            </p>
-            <p>
-              <strong>Location:</strong> {selected.location}
-            </p>
-            <p>
-              <strong>Type:</strong> {selected.type}
-            </p>
-            <p>
-              <strong>Applicants:</strong> {selected.applicants}
-            </p>
-            <p>
-              <strong>Status:</strong> <Badge value={selected.status} />
-            </p>
-            <p>{selected.description}</p>
-            <p>
-              <strong>Accommodations:</strong> {selected.possibleAccommodations}
-            </p>
+            <p><strong>Company:</strong> {selected.company_name ?? "—"}</p>
+            <p><strong>Location:</strong> {selected.location ?? "—"}</p>
+            <p><strong>Type:</strong> {fmtType(selected.contract_type)}</p>
+            <p><strong>Status:</strong> <Badge value={selected.status} /></p>
+            {selected.created_at && (
+              <p><strong>Posted:</strong> {formatDate(selected.created_at)}</p>
+            )}
             <div className="flex flex-wrap gap-2 pt-2">
-              <Button onClick={() => updateStatus(selected, "open")}>Open</Button>
-              <Button variant="ghost" onClick={() => updateStatus(selected, "closed")}>
-                Close
-              </Button>
-              <Button variant="ghost" onClick={() => updateStatus(selected, "archived")}>
-                Archive
-              </Button>
+              {selected.status !== "open" && (
+                <Button onClick={() => updateStatus(selected, "open")}>Open</Button>
+              )}
+              {selected.status !== "closed" && (
+                <Button variant="ghost" onClick={() => updateStatus(selected, "closed")}>
+                  Close
+                </Button>
+              )}
+              {selected.status !== "archived" && (
+                <Button variant="ghost" onClick={() => updateStatus(selected, "archived")}>
+                  Archive
+                </Button>
+              )}
             </div>
           </div>
         )}
