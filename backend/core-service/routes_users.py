@@ -1,10 +1,12 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import date, datetime, timezone
 from typing import Optional
 
 import bcrypt
+import httpx
 from bson import ObjectId
 from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -20,13 +22,7 @@ from auth import (
 )
 from database import db, fs
 from gridfs.errors import NoFile
-from resume_extraction import (
-    extract_text_from_disability_document,
-    extract_text_from_resume_pdf,
-)
-from services.parser_service import normalize_birth_date_iso, parse_document_text, ResourceExhaustedError
 from utils import upload_file_to_gridfs, upload_file_to_gridfs_bytes
-from rag_service import invalidate_candidate_index_cache
 from models import (
     AdminCreate,
     AvailabilityStatus,
@@ -39,6 +35,29 @@ from models import (
 
 router = APIRouter(prefix="/users", tags=["users"])
 logger = logging.getLogger(__name__)
+
+PARSING_SERVICE_URL = os.getenv("PARSING_SERVICE_URL", "http://localhost:8002")
+
+
+async def _parsing_ocr(content: bytes, filename: str, kind: str) -> str:
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            f"{PARSING_SERVICE_URL}/ocr",
+            files={"file": (filename, content, "application/octet-stream")},
+            data={"kind": kind},
+        )
+    resp.raise_for_status()
+    return resp.json().get("text", "")
+
+
+async def _parsing_parse(text: str, doc_type: str) -> dict:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            f"{PARSING_SERVICE_URL}/parse",
+            json={"text": text, "doc_type": doc_type},
+        )
+    resp.raise_for_status()
+    return resp.json()
 
 
 def _normalize_list_fields(doc: dict, fields: tuple = ("work_accommodations", "key_skills", "required_skills")) -> None:
@@ -81,114 +100,6 @@ def hash_password(password: str) -> str:
     return hashed.decode("utf-8")
 
 
-def _allowed_disability_values() -> set[str]:
-    return {e.value for e in DisabilityType}
-
-
-def _allowed_education_values() -> set[str]:
-    return {e.value for e in EducationLevel}
-
-
-def _birth_date_from_parsed(d: dict) -> Optional[date]:
-    if not d:
-        return None
-    raw = (d.get("birth_date") or "").strip()
-    if not raw:
-        return None
-    iso = normalize_birth_date_iso(raw)
-    if not iso and len(raw) >= 10 and raw[4] == "-":
-        try:
-            datetime.strptime(raw[:10], "%Y-%m-%d")
-            iso = raw[:10]
-        except ValueError:
-            iso = ""
-    if not iso:
-        return None
-    try:
-        return date.fromisoformat(iso[:10])
-    except ValueError:
-        return None
-
-
-def _merge_resume_fields(
-    profile_title: str,
-    key_skills: list,
-    years_of_experience: int,
-    parsed_resume: dict,
-) -> tuple[str, list, int]:
-    pt = (parsed_resume.get("profile_title") or "").strip()
-    ks = parsed_resume.get("key_skills")
-    ks_list = ks if isinstance(ks, list) else []
-    has_parsed_content = bool(pt) or bool(ks_list)
-    out_title = pt or profile_title
-    out_skills = ks_list if ks_list else key_skills
-    y = parsed_resume.get("years_of_experience")
-    out_years = years_of_experience
-    if isinstance(y, int):
-        if y > 0:
-            out_years = y
-        elif years_of_experience == 0:
-            out_years = y
-    return out_title, out_skills, out_years
-
-
-def _resolve_disability_type(
-    form_value: DisabilityType,
-    parsed_card: dict,
-) -> str:
-    raw = (parsed_card.get("disability_type") or "").strip()
-    if raw in _allowed_disability_values():
-        return raw
-    return form_value.value
-
-
-def _merge_identity_from_documents(
-    first_name: str,
-    last_name: str,
-    birth_date: date,
-    parsed_card: dict,
-    parsed_resume: dict,
-) -> tuple[str, str, date]:
-    """Card wins for name/DOB when present; otherwise use resume; else form."""
-    fn_c = (parsed_card.get("first_name") or "").strip()
-    ln_c = (parsed_card.get("last_name") or "").strip()
-    fn_r = (parsed_resume.get("first_name") or "").strip()
-    ln_r = (parsed_resume.get("last_name") or "").strip()
-    out_fn = fn_c or fn_r or first_name
-    out_ln = ln_c or ln_r or last_name
-    bd = _birth_date_from_parsed(parsed_card)
-    if bd is None:
-        bd = _birth_date_from_parsed(parsed_resume)
-    if bd is None:
-        bd = birth_date
-    return out_fn, out_ln, bd
-
-
-def _merge_contact_from_resume(
-    email: str,
-    phone_number: str,
-    address: str,
-    industry: str,
-    education_level: EducationLevel,
-    gender: Gender,
-    parsed_resume: dict,
-) -> tuple[str, str, str, str, str, str]:
-    pr = parsed_resume or {}
-    em = (pr.get("email") or "").strip()
-    ph = (pr.get("phone_number") or "").strip()
-    ad = (pr.get("address") or "").strip()
-    ind = (pr.get("industry") or "").strip()
-    edu = (pr.get("education_level") or "").strip()
-    gen = (pr.get("gender") or "").strip().lower()
-    out_e = em if em else email
-    out_p = ph if ph else phone_number
-    out_a = ad if ad else address
-    out_i = ind if ind else industry
-    out_edu = edu if edu in _allowed_education_values() else education_level.value
-    out_g = gen if gen in ("male", "female") else gender.value
-    return out_e, out_p, out_a, out_i, out_edu, out_g
-
-
 @router.post("/candidates/extract-documents")
 async def extract_candidate_documents(
     resume: Optional[UploadFile] = File(None),
@@ -204,41 +115,26 @@ async def extract_candidate_documents(
             detail="Provide at least one file: resume (PDF) or disability_card (PDF/image).",
         )
 
-    out: dict = {"resume": {}, "disability_card": {}, "quota_exceeded": False}
-
+    files: dict = {}
     if resume and resume.filename:
         if not resume.filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Resume must be a PDF file.")
-        rb = await resume.read()
-        raw = extract_text_from_resume_pdf(rb) if rb else ""
-        if raw:
-            try:
-                out["resume"] = await parse_document_text(raw, "resume")
-            except ResourceExhaustedError:
-                out["resume"] = {}
-                out["quota_exceeded"] = True
-            except Exception as e:
-                logger.warning(f"Resume parse failed: {e}")
-                out["resume"] = {}
-
+        files["resume"] = (resume.filename, await resume.read(), resume.content_type or "application/pdf")
     if disability_card and disability_card.filename:
-        dc_bytes = await disability_card.read()
-        raw_dc = (
-            extract_text_from_disability_document(dc_bytes, disability_card.filename or "")
-            if dc_bytes
-            else ""
+        files["disability_card"] = (
+            disability_card.filename,
+            await disability_card.read(),
+            disability_card.content_type or "application/octet-stream",
         )
-        if raw_dc:
-            try:
-                out["disability_card"] = await parse_document_text(raw_dc, "disability_card")
-            except ResourceExhaustedError:
-                out["disability_card"] = {}
-                out["quota_exceeded"] = True
-            except Exception as e:
-                logger.warning(f"Card parse failed: {e}")
-                out["disability_card"] = {}
 
-    return out
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(f"{PARSING_SERVICE_URL}/extract-documents", files=files)
+
+    if resp.status_code >= 400:
+        detail = resp.json().get("detail", resp.text) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+
+    return resp.json()
 
 
 async def _enrich_candidate_with_ai(candidate_id: str, resume_text: str, card_text: str) -> None:
@@ -251,13 +147,13 @@ async def _enrich_candidate_with_ai(candidate_id: str, resume_text: str, card_te
 
         if resume_text.strip():
             try:
-                parsed_resume = await parse_document_text(resume_text, "resume")
+                parsed_resume = await _parsing_parse(resume_text, "resume")
             except Exception as e:
                 logger.warning("AI resume parse failed for %s: %s", candidate_id, e)
 
         if card_text.strip():
             try:
-                parsed_card = await parse_document_text(card_text, "disability_card")
+                parsed_card = await _parsing_parse(card_text, "disability_card")
             except Exception as e:
                 logger.warning("AI card parse failed for %s: %s", candidate_id, e)
 
@@ -291,7 +187,6 @@ async def _enrich_candidate_with_ai(candidate_id: str, resume_text: str, card_te
         if update:
             update["ai_enriched_at"] = datetime.now(timezone.utc)
             await db.candidates.update_one({"_id": _ObjId(candidate_id)}, {"$set": update})
-            invalidate_candidate_index_cache()
             logger.info("AI enrichment completed for candidate %s", candidate_id)
 
     except Exception as e:
@@ -343,15 +238,15 @@ async def register_candidate(
     if disability_card and disability_card.filename:
         dc_bytes = await disability_card.read()
         if dc_bytes:
-            disability_card_text = extract_text_from_disability_document(
-                dc_bytes, disability_card.filename or ""
+            disability_card_text = await _parsing_ocr(
+                dc_bytes, disability_card.filename or "", "disability_card"
             )
         await disability_card.seek(0)
         disability_card_id = await upload_file_to_gridfs(disability_card)
     if resume and resume.filename:
         resume_bytes = await resume.read()
         if resume_bytes:
-            resume_text_raw = extract_text_from_resume_pdf(resume_bytes)
+            resume_text_raw = await _parsing_ocr(resume_bytes, resume.filename or "", "resume")
         await resume.seek(0)
         resume_id = await upload_file_to_gridfs(resume)
 
@@ -412,8 +307,6 @@ async def register_candidate(
         asyncio.create_task(
             _enrich_candidate_with_ai(candidate_id, resume_text_raw, disability_card_text)
         )
-
-    invalidate_candidate_index_cache()
 
     return {
         "id": candidate_id,
@@ -684,7 +577,7 @@ async def update_candidate_profile(
             resume_bytes, resume.filename, "application/pdf"
         )
         update["resume_id"] = resume_id
-        raw_text = extract_text_from_resume_pdf(resume_bytes) if resume_bytes else ""
+        raw_text = await _parsing_ocr(resume_bytes, resume.filename or "", "resume") if resume_bytes else ""
         update["resume_text_raw"] = raw_text[:12000]
 
     if disability_card and disability_card.filename:
@@ -695,7 +588,6 @@ async def update_candidate_profile(
         raise HTTPException(status_code=400, detail="No fields provided to update.")
 
     await db.candidates.update_one({"_id": candidate_id}, {"$set": update})
-    invalidate_candidate_index_cache()
 
     updated = await db.candidates.find_one({"_id": candidate_id})
     updated["_id"] = str(updated["_id"])

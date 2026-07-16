@@ -8,20 +8,29 @@ InclusiveJobs is an inclusive hiring platform that matches job seekers with disa
 
 ## Development Commands
 
-### Backend (FastAPI + Python)
+### Full stack (Docker Compose — primary mode)
 ```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
-# API: http://localhost:8000
-# Swagger docs: http://localhost:8000/docs
+docker-compose up --build
+# Gateway (single entry point for both frontends): http://localhost:8000
+# core-service direct:     http://localhost:8001/docs
+# parsing-service direct:  http://localhost:8002/docs
+# ai-service direct:       http://localhost:8003/docs
 ```
+Requires a `.env` at the repo root with `SECRET_KEY`, `MONGODB_URL`, `GOOGLE_API_KEY`, `GROQ_API_KEY` (see `.env.example`).
+
+### Backend, service-by-service (for iterating on a single service without rebuilding containers)
+```bash
+cd backend/core-service        # or backend/ai-service, backend/parsing-service
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8001   # 8002 for parsing-service, 8003 for ai-service
+```
+core-service needs `PARSING_SERVICE_URL` (defaults to `http://localhost:8002`) to reach a locally-running parsing-service.
 
 ### Frontend (React + Vite)
 ```bash
-cd frontend
+cd frontend        # or cd backoffice
 npm install
-npm run dev        # http://localhost:3000
+npm run dev        # http://localhost:3000 (frontend) — backoffice runs on its own Vite port
 npm run lint       # TypeScript type-check (tsc --noEmit) — no test suite exists
 npm run build      # Production build
 ```

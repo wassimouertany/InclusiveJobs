@@ -1,69 +1,103 @@
 #🌐 InclusiveJobs
 
-> **L'emploi adapté, pour chaque talent.**
+> **Adapted employment, for every talent.**
 
-Une plateforme IA de recrutement inclusif conçue pour faciliter l'accès à l'emploi des personnes à besoins spécifiques, tout en accompagnant les entreprises dans une démarche de recrutement responsable.
-
----
-
-## 📌 À propos du projet
-
-**InclusiveJobs** est une solution numérique intelligente qui met en relation trois types d'utilisateurs :
-
-- 🧑‍💼 **Candidats à besoins spécifiques** — Créer un profil, déposer un CV, déclarer leurs besoins et postuler à des offres adaptées.
-- 🏢 **Recruteurs (entreprises)** — Publier des offres, décrire leur environnement de travail et consulter des profils compatibles.
-- 🛡️ **Administrateurs** — Gérer et superviser la plateforme.
-
-Contrairement aux plateformes classiques, InclusiveJobs utilise l'**Intelligence Artificielle Générative (Gemini)** combinée à une architecture **RAG (Retrieval Augmented Generation)** pour un matching intelligent qui prend en compte non seulement les compétences techniques, mais aussi les contraintes d'accessibilité, les besoins spécifiques du candidat et l'environnement proposé par l'entreprise.
+An AI-powered inclusive hiring platform designed to ease access to employment for people with specific needs, while helping companies adopt a responsible recruitment approach.
 
 ---
 
-## 🚀 Technologies utilisées
+## About the project
+
+**InclusiveJobs** is a smart digital solution connecting three types of users:
+
+- 🧑‍💼 **Candidates with specific needs** — Create a profile, upload a resume, state their needs, and apply to adapted job offers.
+- 🏢 **Recruiters (companies)** — Publish job offers, describe their work environment, and browse compatible profiles.
+- 🛡️ **Administrators** — Manage and oversee the platform.
+
+Unlike traditional platforms, InclusiveJobs uses **Generative AI (Gemini)** combined with a **RAG (Retrieval Augmented Generation)** architecture for smart matching that accounts not only for technical skills, but also for accessibility constraints, the candidate's specific needs, and the environment offered by the company.
+
+---
+
+## Architecture
+
+The backend is split into four containers orchestrated with **Docker Compose**, sitting behind a single **nginx gateway** that both frontends (`frontend/`, `backoffice/`) talk to:
+
+```
+frontend/ ──┐
+backoffice/ ─┼──▶ gateway (nginx, path-based routing) ──┬──▶ core-service   (users, jobs, applications, notifications, stories, badges, admin)
+             │                                          ├──▶ ai-service     (RAG matching — routed at /ai/*, bypasses core-service entirely)
+             │                                          └──▶ parsing-service (OCR + Gemini document extraction, internal only)
+```
+
+| Service             | Responsibility                                                                                | DB access                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **gateway**         | Single entry point, path-based routing (`/ai/*` → ai-service, rest → core-service), owns CORS | —                                                             |
+| **core-service**    | Auth, users, job offers, applications, notifications, stories, badges, admin                  | Read/write, owns all collections except what ai-service reads |
+| **ai-service**      | RAG matching engine (embeddings + FAISS + Gemini scoring)                                     | Read-only: `candidates`, `job_offers`, `recruiters`           |
+| **parsing-service** | Stateless OCR + Gemini structured extraction from resumes/disability cards                    | None (bytes in, JSON out)                                     |
+
+All services share one MongoDB Atlas cluster and validate JWTs independently with the same `SECRET_KEY` (no dedicated auth service).
+
+---
+
+## Technologies used
 
 ### Backend
 
-| Technologie            | Rôle                                         |
-| ---------------------- | -------------------------------------------- |
-| **FastAPI**            | Framework API REST asynchrone                |
-| **MongoDB + Motor**    | Base de données NoSQL (async)                |
-| **GridFS**             | Stockage fichiers (CV, carte handicap, logo) |
-| **Pydantic**           | Validation des données                       |
-| **bcrypt + JWT**       | Authentification sécurisée                   |
-| **LangChain**          | Orchestration des agents IA                  |
-| **Gemini API**         | Intelligence Artificielle Générative         |
-| **Text-Embedding-001** | Embeddings vectoriels (Google)               |
-| **FAISS**              | Base vectorielle pour le matching RAG        |
-| **pdfplumber**         | Extraction de texte des CV PDF               |
-
+| Technology                               | Role                                            | Service(s)                                   |
+| ---------------------------------------- | ----------------------------------------------- | -------------------------------------------- |
+| **FastAPI**                              | Async REST API framework                        | all                                          |
+| **MongoDB + Motor**                      | Async NoSQL database                            | core-service, ai-service (read-only)         |
+| **GridFS**                               | File storage (resumes, disability cards, logos) | core-service                                 |
+| **Pydantic**                             | Data validation                                 | all                                          |
+| **bcrypt + JWT**                         | Secure authentication                           | core-service (issues), ai-service (verifies) |
+| **LangChain**                            | AI agent orchestration                          | ai-service, parsing-service                  |
+| **Gemini API**                           | Generative AI                                   | ai-service, parsing-service                  |
+| **text-embedding-001**                   | Vector embeddings (Google)                      | ai-service                                   |
+| **FAISS**                                | Vector store for RAG matching                   | ai-service                                   |
+| **pdfplumber / pytesseract / pdf2image** | Resume PDF text extraction (with OCR fallback)  | parsing-service                              |
+| **nginx**                                | Reverse proxy / gateway / CORS                  | gateway                                      |
 
 ### Frontend
 
-
-| Technologie | Rôle                  |
-| ----------- | --------------------- |
-| **React**   | Interface utilisateur |
-| **Axios**   | Appels API REST       |
-
+| Technology | Role           |
+| ---------- | -------------- |
+| **React**  | User interface |
+| **Axios**  | REST API calls |
 
 ---
 
-## ▶️ Lancer le backend
+## ▶️ Running the project
 
-Depuis la racine du projet :
+### Full stack (Docker Compose — recommended)
+
+From the project root, create a `.env` file (see `.env.example`) with `SECRET_KEY`, `MONGODB_URL`, `GOOGLE_API_KEY`, `GROQ_API_KEY`, then:
 
 ```bash
-cd backend
+docker-compose up --build
+```
+
+- Gateway (single entry point for both frontends): **http://localhost:8000**
+- core-service direct / Swagger: **http://localhost:8001/docs**
+- parsing-service direct / Swagger: **http://localhost:8002/docs**
+- ai-service direct / Swagger: **http://localhost:8003/docs**
+
+### Backend, service-by-service (for iterating on one service without rebuilding containers)
+
+```bash
+cd backend/core-service        # or backend/ai-service, backend/parsing-service
 pip install -r requirements.txt
-c
+uvicorn main:app --reload --port 8001   # 8002 for parsing-service, 8003 for ai-service
 ```
 
-Ou en une ligne depuis la racine (avec le bon répertoire de travail) :
+core-service needs `PARSING_SERVICE_URL` (defaults to `http://localhost:8002`) to reach a locally-running parsing-service.
+
+### Frontend
 
 ```bash
-cd backend && uvicorn main:app --reload
+cd frontend        # or cd backoffice
+npm install
+npm run dev
 ```
 
-L’API sera disponible sur **[http://localhost:8000](http://localhost:8000)**. La doc Swagger : **[http://localhost:8000/docs](http://localhost:8000/docs)**.
-
----
-
+The frontend is available at **http://localhost:3000**; point `VITE_API_URL` at the gateway (`http://localhost:8000`) via `.env.local`.

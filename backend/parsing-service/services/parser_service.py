@@ -12,7 +12,7 @@ from calendar import monthrange
 from datetime import datetime
 from typing import Any
 
-from rag_service import get_llm
+from llm_client import get_llm
 
 logger = logging.getLogger(__name__)
 
