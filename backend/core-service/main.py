@@ -1,13 +1,11 @@
 from contextlib import asynccontextmanager
 from routes_admin import router as admin_router
-from routes_ai import router as ai_router
 from routes_applications import router as applications_router
 from routes_notifications import router as notifications_router
 from routes_stories import router as stories_router
 from routes_badges import router as badges_router
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from database import ping_db
 from routes_job_offers import router as job_offers_router
@@ -22,24 +20,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="InclusiveJobs", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 app.include_router(admin_router)
 app.include_router(users_router)
 app.include_router(job_offers_router)
-app.include_router(ai_router)
 app.include_router(applications_router)
 app.include_router(notifications_router)
 app.include_router(stories_router)

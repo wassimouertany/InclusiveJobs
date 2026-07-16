@@ -10,7 +10,6 @@ from pydantic import BaseModel, Json
 from auth import get_current_recruiter
 from database import db, fs
 from models import ContractType, OfferStatus
-from rag_service import invalidate_offer_index_cache
 from utils import upload_file_to_gridfs
 
 router = APIRouter(prefix="/job-offers", tags=["job-offers"])
@@ -106,7 +105,6 @@ async def create_job_offer(
 
     result = await db.job_offers.insert_one(offer_dict)
     offer_id = str(result.inserted_id)
-    invalidate_offer_index_cache()
 
     return {"id": offer_id}
 
@@ -293,7 +291,6 @@ async def delete_my_offer(
             pass
 
     await db.job_offers.delete_one({"_id": oid})
-    invalidate_offer_index_cache()
     return {"message": "Offer deleted.", "id": offer_id}
 
 
@@ -317,7 +314,6 @@ async def update_offer_status(
         {"_id": oid},
         {"$set": {"status": body.status.value}},
     )
-    invalidate_offer_index_cache()
 
     return {"message": "Offer status updated.", "status": body.status.value}
 
@@ -379,7 +375,6 @@ async def update_job_offer(
         raise HTTPException(status_code=400, detail="Title cannot be empty.")
 
     await db.job_offers.update_one({"_id": oid}, {"$set": update})
-    invalidate_offer_index_cache()
 
     updated = await db.job_offers.find_one({"_id": oid})
     updated["_id"] = str(updated["_id"])

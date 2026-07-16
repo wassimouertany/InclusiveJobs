@@ -1,12 +1,8 @@
 fastapi
 uvicorn
-motor
-pydantic
-pydantic-settings
-python-multipart
+motor==3.7.1
+pymongo==4.16.0
 python-dotenv
-bcrypt
-email-validator
 PyJWT
 langchain-google-genai
 langchain-groq
@@ -15,8 +11,3 @@ langchain
 langchain-core
 faiss-cpu
 google-generativeai
-pymongo
-pdfplumber
-pytesseract
-pdf2image
-Pillow
