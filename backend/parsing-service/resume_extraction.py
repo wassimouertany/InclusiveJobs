@@ -103,7 +103,7 @@ def extract_text_from_disability_document(content: bytes, filename: str) -> str:
         return ""
     name = (filename or "").lower()
     if name.endswith(".pdf"):
-        return extract_text_from_resume_pdf(content)
+        return extract_text_from_resume_pdf(content, filename)
     if name.endswith(
         (".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp", ".gif")
     ):
@@ -112,19 +112,20 @@ def extract_text_from_disability_document(content: bytes, filename: str) -> str:
     return ""
 
 
-def extract_text_from_resume_pdf(pdf_bytes: bytes) -> str:
+def extract_text_from_resume_pdf(content: bytes, filename: str = "") -> str:
     """
     Try normal PDF text extraction; if the result is too short (likely a scan),
-    fall back to OCR.
+    fall back to OCR. `filename` is accepted (unused) to keep the same
+    (content, filename) signature as extract_text_from_disability_document.
     """
-    if not pdf_bytes:
+    if not content:
         return ""
 
-    direct = _pdf_text_pdfplumber(pdf_bytes)
+    direct = _pdf_text_pdfplumber(content)
     if len(direct) >= MIN_MEANINGFUL_TEXT_LEN:
         return direct
 
-    ocr = _pdf_text_ocr(pdf_bytes)
+    ocr = _pdf_text_ocr(content)
     if ocr:
         return ocr
     return direct

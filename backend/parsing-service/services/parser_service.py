@@ -22,8 +22,6 @@ class ResourceExhaustedError(Exception):
 
 MAX_DOC_TEXT_CHARS = 16000
 
-DOC_TYPES = frozenset({"resume", "disability_card"})
-
 # Match backend EducationLevel enum (avoid importing models circularly)
 VALID_EDUCATION_LEVELS = frozenset(
     {
@@ -324,150 +322,23 @@ def _heuristic_resume_header_names(ocr: str) -> tuple[str, str]:
     return "", ""
 
 
-def _parse_locally(text: str, doc_type: str) -> dict:
-    result = {}
-    t = text.lower()
-
-    if doc_type == "resume":
-        m = re.search(r'[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}', text)
-        if m:
-            result["email"] = m.group(0)
-
-        m = re.search(r'[\+\(]?[0-9][0-9 .\-\(\)]{7,}[0-9]', text)
-        if m:
-            result["phone_number"] = m.group(0).strip()
-
-        m = re.search(r'(\d+)\s*(?:years?|ans?)\s*(?:of\s*)?(?:experience|expérience)', text, re.I)
-        if m:
-            result["years_of_experience"] = int(m.group(1))
-
-        for kw, val in [
-            ("doctorate", "doctorate"), ("phd", "doctorate"),
-            ("master", "masters"), ("mba", "masters"),
-            ("ingénieur", "engineering_degree"), ("engineering", "engineering_degree"),
-            ("bachelor", "bachelors"), ("licence", "bachelors"), ("b.tech", "bachelors"),
-            ("baccalauréat", "high_school"), ("high school", "high_school"),
-            ("vocational", "vocational_training"), ("bts", "vocational_training"),
-        ]:
-            if kw in t:
-                result["education_level"] = val
-                break
-
-        SKILLS = [
-            "python", "java", "javascript", "typescript", "react", "angular", "vue",
-            "nodejs", "fastapi", "django", "flask", "spring", "mongodb", "postgresql",
-            "mysql", "docker", "kubernetes", "git", "aws", "azure", "figma", "sql",
-            "html", "css", "tailwind", "langchain", "machine learning", "tensorflow",
-            "pytorch", "scrum", "agile", "jira", "linux", "bash", "c++", "c#", "php",
-            "ruby", "swift", "kotlin", "flutter", "dart", "redis", "elasticsearch",
-        ]
-        result["key_skills"] = [s for s in SKILLS if s in t]
-
-    if doc_type == "disability_card":
-        m = re.search(r'(\d{4}-\d{2}-\d{2})', text)
-        if m:
-            result["expiry_date"] = m.group(1)
-        m2 = re.search(r'(\d{2})[\/\-](\d{2})[\/\-](\d{4})', text)
-        if m2:
-            result["expiry_date"] = f"{m2.group(3)}-{m2.group(2)}-{m2.group(1)}"
-
-        for kw, val in [
-            ("motor", "motor"), ("mobility", "motor"), ("wheelchair", "motor"),
-            ("visual", "visual"), ("blind", "visual"), ("sight", "visual"),
-            ("hearing", "hearing"), ("deaf", "hearing"),
-            ("cognitive", "cognitive"), ("learning", "cognitive"),
-            ("psychological", "psychological"), ("mental", "psychological"),
-        ]:
-            if kw in t:
-                result["disability_type"] = val
-                break
-
-    return result
-
-
 async def parse_document_text(text: str, doc_type: str) -> dict[str, Any]:
-    """
-    Ask Gemini to return strict JSON for the given document OCR text.
+    """Ask Gemini for strict JSON; doc_type-specific behavior lives in its DocumentTypeSpec."""
+    # Local import: avoids a circular import, since document_specs.py imports
+    # the shared helpers defined above from this module.
+    from services.document_specs import get_spec
 
-    doc_type:
-      - "resume" -> profile_title, key_skills (list), years_of_experience (int)
-      - "disability_card" -> disability_type, card_number, expiry_date, first_name, last_name, birth_date
-    """
-    if doc_type not in DOC_TYPES:
-        raise ValueError(f"doc_type must be one of {sorted(DOC_TYPES)}")
+    spec = get_spec(doc_type)
     if not (text or "").strip():
-        return _empty_result(doc_type)
-
+        return spec.empty_result()
     if not os.getenv("GOOGLE_API_KEY"):
         logger.warning("GOOGLE_API_KEY not set; skipping Gemini document parse")
-        return _empty_result(doc_type)
+        return spec.empty_result()
 
     trimmed = text.strip()
     if len(trimmed) > MAX_DOC_TEXT_CHARS:
         trimmed = trimmed[:MAX_DOC_TEXT_CHARS] + "\n[... truncated ...]"
-
-    if doc_type == "resume":
-        prompt = f"""You extract ALL useful structured data from a job resume/CV (plain text, may come from OCR).
-
-RESUME TEXT:
----
-{trimmed}
----
-
-Respond with ONLY a valid JSON object and no other text (no markdown fences). Use exactly these keys:
-{{
-  "first_name": "<candidate given / first name(s), Title Case, else empty>",
-  "last_name": "<family / surname, else empty>",
-  "birth_date": "<YYYY-MM-DD if date of birth or age can be inferred; else empty>",
-  "email": "<primary email if visible, lowercase, else empty>",
-  "phone_number": "<phone / mobile in international or local form, else empty>",
-  "address": "<city, country or full address line if visible, else empty>",
-  "industry": "<short sector e.g. Software, Healthcare, else empty>",
-  "education_level": "<exactly one of: no_degree, vocational_training, high_school, bachelors, masters, engineering_degree, doctorate, other — from highest completed degree>",
-  "gender": "<exactly male or female if explicitly stated, else empty string>",
-  "profile_title": "<current or target job title / headline, else empty>",
-  "key_skills": ["<skill1>", "<skill2>"],
-  "years_of_experience": <integer total professional years, estimate from employment history, or 0>
-}}
-
-Rules:
-- NAMES: Parse from header (top of CV), "Name:", contact block, or signature. Western order: first_name = given names, last_name = surname. For single-line headers like "Jean Dupont", split given name vs family name logically.
-- birth_date: only if explicit DOB or clear birth year; else "".
-- education_level MUST be one of the listed snake_case values or "" if unknown.
-- key_skills: max 25 concise items, no duplicates.
-- years_of_experience: non-negative integer; 0 if student only or unknown.
-- Use "" or [] or 0 for anything not found.
-"""
-    else:
-        prompt = f"""You extract structured data from a disability identification card (plain text, may come from OCR).
-
-CARD TEXT:
----
-{trimmed}
----
-
-Respond with ONLY a valid JSON object and no other text (no markdown fences). Use exactly these keys:
-{{
-  "disability_type": "<one of: motor, visual, hearing, cognitive, psychological, other>",
-  "card_number": "<id or reference number if visible, else empty string>",
-  "expiry_date": "<expiry as printed, prefer ISO YYYY-MM-DD if clear, else raw string or empty>",
-  "first_name": "<given names / first name(s) as on card, Title Case, else empty>",
-  "last_name": "<surname / family name as on card, else empty>",
-  "birth_date": "<date of birth ONLY as YYYY-MM-DD if you can infer it, else empty string>"
-}}
-
-Rules:
-- disability_type MUST be exactly one of: motor, visual, hearing, cognitive, psychological, other.
-- Map common terms (e.g. physical/mobility -> motor, deaf -> hearing).
-- If unclear, use "other" for disability_type.
-- NAMES ARE CRITICAL: scan the whole text. Map labels to JSON fields in ANY language you see, for example:
-  * English: "Surname" / "Family name" / "Last name" -> last_name; "Given names" / "First name" / "Forename" -> first_name
-  * French: "Nom" / "Nom de famille" -> last_name; "Prénom" / "Prénoms" -> first_name (if only "Nom et prénom" on one line, split into last then first if possible)
-  * Arabic: اللقب / اسم العائلة -> last_name; الاسم / الاسم الشخصي -> first_name
-- If names appear as ALL CAPS (e.g. SMITH, JANE ELIZABETH), still fill first_name and last_name with that text (normalize to readable Title Case in JSON values).
-- Do NOT leave first_name/last_name empty if the OCR text clearly contains a person name next to any of these labels.
-- For birth_date convert formats like 07-DEC-1989 or 17/01/2028-style birth lines to YYYY-MM-DD when possible.
-"""
+    prompt = spec.build_prompt(trimmed)
 
     llm = get_llm()
     try:
@@ -476,7 +347,7 @@ Rules:
         err_str = str(e)
         if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str or "rate" in err_str.lower():
             logger.warning("LLM quota hit — using local parser fallback")
-            return _parse_locally(text, doc_type)
+            return spec.parse_locally(text)
         raise
 
     try:
@@ -487,35 +358,19 @@ Rules:
         parsed = json.loads(_strip_json_fences(raw_out))
     except Exception as exc:
         logger.warning("Gemini document parse failed: %s", exc)
-        return _empty_result(doc_type)
+        return spec.empty_result()
+    return spec.normalize(parsed, ocr_source=trimmed)
 
-    return _normalize_parsed(parsed, doc_type, ocr_source=trimmed)
 
+# --- Back-compat wrappers -----------------------------------------------
+# test_parser_service.py imports these directly. They now just delegate to
+# the doc_type's spec (a dict lookup, not a doc_type branch), so adding a
+# new document type never requires touching them.
 
 def _empty_result(doc_type: str) -> dict[str, Any]:
-    if doc_type == "resume":
-        return {
-            "first_name": "",
-            "last_name": "",
-            "birth_date": "",
-            "email": "",
-            "phone_number": "",
-            "address": "",
-            "industry": "",
-            "education_level": "",
-            "gender": "",
-            "profile_title": "",
-            "key_skills": [],
-            "years_of_experience": 0,
-        }
-    return {
-        "disability_type": "",
-        "card_number": "",
-        "expiry_date": "",
-        "first_name": "",
-        "last_name": "",
-        "birth_date": "",
-    }
+    from services.document_specs import get_spec
+
+    return get_spec(doc_type).empty_result()
 
 
 def _normalize_parsed(
@@ -523,69 +378,12 @@ def _normalize_parsed(
     doc_type: str,
     ocr_source: str | None = None,
 ) -> dict[str, Any]:
-    if doc_type == "resume":
-        title = str(parsed.get("profile_title") or "").strip()
-        skills = _coerce_skills(parsed.get("key_skills"))
-        years = _coerce_years(parsed.get("years_of_experience"))
-        if years is None:
-            years = 0
-        fn = str(parsed.get("first_name") or "").strip()
-        ln = str(parsed.get("last_name") or "").strip()
-        bd_raw = str(parsed.get("birth_date") or "").strip()
-        bd_iso = normalize_birth_date_iso(bd_raw) if bd_raw else ""
-        edu = str(parsed.get("education_level") or "").strip().lower().replace(" ", "_")
-        if edu not in VALID_EDUCATION_LEVELS:
-            edu = ""
-        gen = str(parsed.get("gender") or "").strip().lower()
-        if gen not in ("male", "female"):
-            gen = ""
-        if ocr_source and (not fn or not ln):
-            hf, hl = _heuristic_extract_names(ocr_source)
-            if not fn and hf:
-                fn = hf
-            if not ln and hl:
-                ln = hl
-        if ocr_source and (not fn or not ln):
-            rf, rl = _heuristic_resume_header_names(ocr_source[:2000])
-            if not fn and rf:
-                fn = rf
-            if not ln and rl:
-                ln = rl
-        fn = _title_if_all_caps(fn) if fn else ""
-        ln = _title_if_all_caps(ln) if ln else ""
-        return {
-            "first_name": fn,
-            "last_name": ln,
-            "birth_date": bd_iso,
-            "email": str(parsed.get("email") or "").strip().lower(),
-            "phone_number": str(parsed.get("phone_number") or "").strip(),
-            "address": str(parsed.get("address") or "").strip(),
-            "industry": str(parsed.get("industry") or "").strip(),
-            "education_level": edu,
-            "gender": gen,
-            "profile_title": title,
-            "key_skills": skills,
-            "years_of_experience": years,
-        }
+    from services.document_specs import get_spec
 
-    dt = _normalize_disability_type(parsed.get("disability_type"))
-    bd_gemini = str(parsed.get("birth_date") or "").strip()
-    bd_iso = normalize_birth_date_iso(bd_gemini) if bd_gemini else ""
-    fn = str(parsed.get("first_name") or "").strip()
-    ln = str(parsed.get("last_name") or "").strip()
-    if ocr_source and (not fn or not ln):
-        hf, hl = _heuristic_extract_names(ocr_source)
-        if not fn and hf:
-            fn = hf
-        if not ln and hl:
-            ln = hl
-    fn = _title_if_all_caps(fn) if fn else ""
-    ln = _title_if_all_caps(ln) if ln else ""
-    return {
-        "disability_type": dt or "",
-        "card_number": str(parsed.get("card_number") or "").strip(),
-        "expiry_date": str(parsed.get("expiry_date") or "").strip(),
-        "first_name": fn,
-        "last_name": ln,
-        "birth_date": bd_iso,
-    }
+    return get_spec(doc_type).normalize(parsed, ocr_source)
+
+
+def _parse_locally(text: str, doc_type: str) -> dict:
+    from services.document_specs import get_spec
+
+    return get_spec(doc_type).parse_locally(text)
