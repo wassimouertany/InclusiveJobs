@@ -8,3 +8,5 @@ pdf2image
 Pillow
 langchain-google-genai
 langchain-groq
+pytest
+pytest-asyncio

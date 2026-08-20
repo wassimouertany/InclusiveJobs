@@ -429,7 +429,7 @@ export default function AccessibilityWidget() {
 
                   <div className="grid grid-cols-2 gap-2">
                     <button
-                      onClick={() => set(!readableFont)}
+                      onClick={() => setReadableFont(!readableFont)}
                       className={`flex flex-ReadableFontcol items-center justify-center gap-2 p-3 rounded-xl border transition-all ${readableFont ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}
                     >
                       <Type className="w-5 h-5" />

@@ -8,6 +8,7 @@ from resume_extraction import (
     extract_text_from_disability_document,
     extract_text_from_resume_pdf,
 )
+from services.document_specs import get_spec
 from services.parser_service import ResourceExhaustedError, parse_document_text
 
 logger = logging.getLogger(__name__)
@@ -28,10 +29,7 @@ async def ocr(
     content = await file.read()
     if not content:
         return {"text": ""}
-    if kind == "resume":
-        text = extract_text_from_resume_pdf(content)
-    else:
-        text = extract_text_from_disability_document(content, file.filename or "")
+    text = get_spec(kind).extract_text(content, file.filename or "")
     return {"text": text}
 
 
