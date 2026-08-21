@@ -1,5 +1,6 @@
 import os
-from typing import Optional
+from dataclasses import dataclass
+from typing import Awaitable, Callable, Optional
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.documents import Document
@@ -126,40 +127,66 @@ async def get_all_offers_as_docs() -> list[Document]:
     return docs
 
 
-async def find_matching_candidates(offer: dict, top_k: int = 10) -> list[dict]:
+@dataclass(frozen=True)
+class MatchingDirection:
     """
-    RAG flow for recruiters:
-    1. Build offer text → embed it
-    2. Similarity search against all candidate embeddings
-    3. Ask Gemini to score + explain each match
-    Returns a list of dicts: {candidate_id, name, score, explanation}
+    What varies between the two matching directions (offer -> candidates,
+    candidate -> offers). id_key/label_key are each used TWICE: read off
+    doc.metadata and written into the result dict under that same key --
+    the JSON contract returned to the frontend must stay exactly as it is.
     """
+
+    build_query_text: Callable[[dict], str]
+    fetch_corpus: Callable[[], Awaitable[list[Document]]]
+    id_key: str
+    label_key: str
+    query_context: str
+    corpus_context: str
+
+
+OFFER_TO_CANDIDATES = MatchingDirection(
+    build_offer_text, get_all_candidates_as_docs,
+    "candidate_id", "name",
+    "job offer", "candidate profile",
+)
+CANDIDATE_TO_OFFERS = MatchingDirection(
+    build_candidate_text, get_all_offers_as_docs,
+    "offer_id", "title",
+    "candidate profile", "job offer",
+)
+
+
+async def retrieve_top_k(
+    query_text: str, docs: list[Document], top_k: int
+) -> list[tuple[Document, float]]:
+    """Embed the corpus, build an in-memory FAISS index, run the similarity search."""
     from langchain_community.vectorstores import FAISS
 
-    offer_text = build_offer_text(offer)
     embeddings = get_embeddings()
+    vectorstore = FAISS.from_documents(docs, embeddings)
+    return vectorstore.similarity_search_with_score(query_text, k=top_k)
 
-    candidate_docs = await get_all_candidates_as_docs()
-    if not candidate_docs:
-        return []
 
-    # Build in-memory FAISS index from all candidates
-    vectorstore = FAISS.from_documents(candidate_docs, embeddings)
-    similar_docs = vectorstore.similarity_search_with_score(offer_text, k=top_k)
-
-    # For each result, ask Gemini to provide a detailed compatibility score
+async def rank_and_explain(
+    query_text: str,
+    hits: list[tuple[Document, float]],
+    direction: MatchingDirection,
+) -> list[dict]:
+    """Ask Gemini to score + explain each hit, then sort by ai_score descending."""
     results = []
-    for doc, distance in similar_docs:
+    for doc, distance in hits:
         explanation = await _explain_match(
-            entity_a=offer_text,
+            entity_a=query_text,
             entity_b=doc.page_content,
-            context_a="job offer",
-            context_b="candidate profile",
+            context_a=direction.query_context,
+            context_b=direction.corpus_context,
         )
+        # TODO: this treats an L2 distance from FAISS as if it were a cosine
+        # similarity, which is a questionable conversion — separate cleanup.
         similarity_score = max(0, min(100, int((1 - distance) * 100)))
         results.append({
-            "candidate_id": doc.metadata["candidate_id"],
-            "name": doc.metadata["name"],
+            direction.id_key: doc.metadata[direction.id_key],
+            direction.label_key: doc.metadata[direction.label_key],
             "vector_score": similarity_score,
             "ai_score": explanation.get("score", similarity_score),
             "explanation": explanation.get("explanation", ""),
@@ -168,6 +195,33 @@ async def find_matching_candidates(offer: dict, top_k: int = 10) -> list[dict]:
         })
 
     return sorted(results, key=lambda x: x["ai_score"], reverse=True)
+
+
+async def _run_matching(
+    entity: dict, direction: MatchingDirection, top_k: int = 10
+) -> list[dict]:
+    """Shared retrieval+scoring pipeline. `entity` is only ever handed to
+    build_query_text — never re-filtered or validated here; any eligibility
+    filter (availability_status, offer status) lives solely in fetch_corpus."""
+    query_text = direction.build_query_text(entity)
+
+    corpus_docs = await direction.fetch_corpus()
+    if not corpus_docs:
+        return []
+
+    hits = await retrieve_top_k(query_text, corpus_docs, top_k)
+    return await rank_and_explain(query_text, hits, direction)
+
+
+async def find_matching_candidates(offer: dict, top_k: int = 10) -> list[dict]:
+    """
+    RAG flow for recruiters:
+    1. Build offer text → embed it
+    2. Similarity search against all candidate embeddings
+    3. Ask Gemini to score + explain each match
+    Returns a list of dicts: {candidate_id, name, score, explanation}
+    """
+    return await _run_matching(offer, OFFER_TO_CANDIDATES, top_k)
 
 
 async def find_matching_offers(candidate: dict, top_k: int = 10) -> list[dict]:
@@ -177,38 +231,7 @@ async def find_matching_offers(candidate: dict, top_k: int = 10) -> list[dict]:
     2. Similarity search against all job offer embeddings
     3. Ask Gemini to score + explain each match
     """
-    from langchain_community.vectorstores import FAISS
-
-    candidate_text = build_candidate_text(candidate)
-    embeddings = get_embeddings()
-
-    offer_docs = await get_all_offers_as_docs()
-    if not offer_docs:
-        return []
-
-    vectorstore = FAISS.from_documents(offer_docs, embeddings)
-    similar_docs = vectorstore.similarity_search_with_score(candidate_text, k=top_k)
-
-    results = []
-    for doc, distance in similar_docs:
-        explanation = await _explain_match(
-            entity_a=candidate_text,
-            entity_b=doc.page_content,
-            context_a="candidate profile",
-            context_b="job offer",
-        )
-        similarity_score = max(0, min(100, int((1 - distance) * 100)))
-        results.append({
-            "offer_id": doc.metadata["offer_id"],
-            "title": doc.metadata["title"],
-            "vector_score": similarity_score,
-            "ai_score": explanation.get("score", similarity_score),
-            "explanation": explanation.get("explanation", ""),
-            "strengths": explanation.get("strengths", []),
-            "concerns": explanation.get("concerns", []),
-        })
-
-    return sorted(results, key=lambda x: x["ai_score"], reverse=True)
+    return await _run_matching(candidate, CANDIDATE_TO_OFFERS, top_k)
 
 
 async def _explain_match(

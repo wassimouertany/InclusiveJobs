@@ -7,8 +7,10 @@ adding one new DocumentTypeSpec subclass and one registry entry below --
 no existing branch in parser_service.py or main.py needs to change.
 
 The shared low-level helpers (name heuristics, date/skill/years coercion,
-disability-type synonym mapping) stay in services/parser_service.py and are
-reused here, since they aren't doc_type-specific themselves.
+disability-type synonym mapping) live in services/text_helpers.py and are
+reused here, since they aren't doc_type-specific themselves. This module
+does NOT import from parser_service.py, keeping the dependency graph a DAG:
+text_helpers <- document_specs <- parser_service <- main.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from resume_extraction import (
     extract_text_from_disability_document,
     extract_text_from_resume_pdf,
 )
-from services.parser_service import (
+from services.text_helpers import (
     VALID_EDUCATION_LEVELS,
     _coerce_skills,
     _coerce_years,
