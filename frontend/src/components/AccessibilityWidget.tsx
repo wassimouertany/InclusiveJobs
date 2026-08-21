@@ -28,8 +28,10 @@ import {
 } from "lucide-react";
 import { getFocusModeEnabled, setFocusModeEnabled } from "../utils/focusMode";
 
-const FONT_SIZE_LEVELS = ["Small", "Default", "Large", "X-Large"];
-const FONT_SCALE_VALUES = [0.875, 1, 1.125, 1.25];
+const FONT_SIZE_MIN = 75;
+const FONT_SIZE_MAX = 200;
+const FONT_SIZE_STEP = 10;
+const FONT_SIZE_DEFAULT = 100;
 const LINE_HEIGHT_LEVELS = ["Compact", "Default", "Relaxed", "Double"];
 const LINE_HEIGHT_VALUES = [1.2, 1.5, 1.75, 2];
 const LETTER_SPACING_LEVELS = ["Tight", "Default", "Wide", "X-Wide"];
@@ -76,7 +78,7 @@ const BIG_CURSOR_DATA_URI =
 
 export default function AccessibilityWidget() {
   const [open, setOpen] = useState(false);
-  const [fontSizeLevel, setFontSizeLevel] = useState(1);
+  const [fontSizePercent, setFontSizePercent] = useState(FONT_SIZE_DEFAULT);
   const [lineHeightLevel, setLineHeightLevel] = useState(1);
   const [letterSpacingLevel, setLetterSpacingLevel] = useState(1);
   const [alignIndex, setAlignIndex] = useState(0);
@@ -112,7 +114,7 @@ export default function AccessibilityWidget() {
   useEffect(() => {
     document.body.style.setProperty(
       "--a11y-font-scale",
-      String(FONT_SCALE_VALUES[fontSizeLevel]),
+      String(fontSizePercent / 100),
     );
     document.body.style.setProperty(
       "--a11y-line-height",
@@ -128,7 +130,7 @@ export default function AccessibilityWidget() {
       FONT_WEIGHT_VALUES[fontWeightIndex],
     );
   }, [
-    fontSizeLevel,
+    fontSizePercent,
     lineHeightLevel,
     letterSpacingLevel,
     alignIndex,
@@ -280,7 +282,7 @@ export default function AccessibilityWidget() {
     document.body.style.removeProperty("text-align");
     document.body.style.removeProperty("font-weight");
     document.body.style.removeProperty("font-family");
-    setFontSizeLevel(1);
+    setFontSizePercent(FONT_SIZE_DEFAULT);
     setLineHeightLevel(1);
     setLetterSpacingLevel(1);
     setAlignIndex(0);
@@ -395,20 +397,24 @@ export default function AccessibilityWidget() {
                     <div className="flex items-center justify-between">
                       <button
                         onClick={() =>
-                          setFontSizeLevel((n) => Math.max(0, n - 1))
+                          setFontSizePercent((n) => Math.max(FONT_SIZE_MIN, n - FONT_SIZE_STEP))
                         }
-                        className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                        disabled={fontSizePercent <= FONT_SIZE_MIN}
+                        aria-label="Decrease font size"
+                        className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                       >
                         <MinusCircle className="w-5 h-5" />
                       </button>
                       <span className="text-sm font-semibold text-gray-900 w-20 text-center">
-                        {FONT_SIZE_LEVELS[fontSizeLevel]}
+                        {fontSizePercent}%
                       </span>
                       <button
                         onClick={() =>
-                          setFontSizeLevel((n) => Math.min(3, n + 1))
+                          setFontSizePercent((n) => Math.min(FONT_SIZE_MAX, n + FONT_SIZE_STEP))
                         }
-                        className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                        disabled={fontSizePercent >= FONT_SIZE_MAX}
+                        aria-label="Increase font size"
+                        className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                       >
                         <PlusCircle className="w-5 h-5" />
                       </button>
