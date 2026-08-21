@@ -299,6 +299,7 @@ export default function AccessibilityWidget() {
     <>
       <button
         type="button"
+        data-guide="a11y_widget"
         onClick={() => setOpen(!open)}
         aria-label="Toggle accessibility menu"
         className={`fixed right-0 top-1/2 -translate-y-1/2 z-[9998] w-12 h-12 flex items-center justify-center rounded-l-xl bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition-all duration-300 ${open ? "translate-x-full" : "translate-x-0"}`}

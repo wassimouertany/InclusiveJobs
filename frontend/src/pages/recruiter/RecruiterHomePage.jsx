@@ -7,8 +7,10 @@ import {
   Calendar,
   FileText,
   Filter,
+  Users,
 } from "lucide-react";
 import { apiClient } from "../../services/apiClient";
+import GuideChecklist from "../../features/guide/GuideChecklist";
 
 function companyInitials(name) {
   const clean = (name || "").trim();
@@ -31,8 +33,8 @@ function getGreeting() {
 // ---------------------------------------------------------------------------
 function StatsSkeleton() {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {[0, 1, 2, 3].map((i) => (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {[0, 1, 2, 3, 4].map((i) => (
         <div
           key={i}
           className="bg-white rounded-2xl p-6 border border-indigo-50 shadow-sm animate-pulse"
@@ -57,6 +59,7 @@ export default function RecruiterHomePage() {
   const [logoFailed, setLogoFailed] = useState(false);
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [headcount, setHeadcount] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +82,8 @@ export default function RecruiterHomePage() {
           profileRes.value.status < 300
         ) {
           setCompanyName(profileRes.value.data?.company_name?.trim() || "");
+          const rawHeadcount = profileRes.value.data?.employees_with_disability;
+          setHeadcount(typeof rawHeadcount === "number" ? rawHeadcount : 0);
         }
         if (
           logoRes.status === "fulfilled" &&
@@ -169,13 +174,26 @@ export default function RecruiterHomePage() {
         </div>
       </div>
 
+      <GuideChecklist />
+
       {/* ── Section 2: Stats grid ─────────────────────────────────────── */}
       {statsLoading ? (
         <StatsSkeleton />
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
             {
+              key: "headcount",
+              label: "Employees w/ Disability",
+              value: headcount ?? 0,
+              sub: "personnes à besoins spécifiques",
+              iconBg: "bg-rose-100",
+              iconColor: "text-rose-600",
+              Icon: Users,
+              guideId: "recruiter_headcount",
+            },
+            {
+              key: "open_offers",
               label: "Open Offers",
               value: stats?.open_offers ?? 0,
               sub: `of ${stats?.total_offers ?? 0} total`,
@@ -184,6 +202,7 @@ export default function RecruiterHomePage() {
               Icon: Briefcase,
             },
             {
+              key: "applications",
               label: "Applications",
               value: stats?.total_applications ?? 0,
               sub: `${stats?.pending_applications ?? 0} pending review`,
@@ -192,6 +211,7 @@ export default function RecruiterHomePage() {
               Icon: FileText,
             },
             {
+              key: "interviews",
               label: "Interviews",
               value: stats?.interviews_scheduled ?? 0,
               sub: `${stats?.accepted ?? 0} accepted`,
@@ -200,6 +220,7 @@ export default function RecruiterHomePage() {
               Icon: Calendar,
             },
             {
+              key: "saved_candidates",
               label: "Saved Candidates",
               value: stats?.total_saved_candidates ?? 0,
               sub: "across all offers",
@@ -207,9 +228,10 @@ export default function RecruiterHomePage() {
               iconColor: "text-amber-600",
               Icon: Bookmark,
             },
-          ].map(({ label, value, sub, iconBg, iconColor, Icon }) => (
+          ].map(({ key, label, value, sub, iconBg, iconColor, Icon, guideId }) => (
             <div
-              key={label}
+              key={key}
+              data-guide={guideId}
               className="bg-white rounded-2xl p-6 border border-indigo-50 shadow-sm hover:shadow-md transition-shadow"
             >
               <div

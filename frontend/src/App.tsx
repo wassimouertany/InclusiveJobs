@@ -26,6 +26,7 @@ import RecruiterApplicationsPage from "./pages/recruiter/RecruiterApplicationsPa
 import CommunityPage from "./pages/community/CommunityPage";
 import CompanyDetailPage from "./pages/community/CompanyDetailPage";
 import RecruiterHomePage from "./pages/recruiter/RecruiterHomePage";
+import { ShadowGuideProvider } from "./features/guide/ShadowGuideProvider";
 
 function LandingPage() {
   return (
@@ -45,7 +46,13 @@ function AppShell({ children }: { children: ReactNode }) {
       <Navbar />
       {/* Avoid AnimatePresence + motion around <Routes>: it re-renders Routes with the
           new URL during exit and can leave the main area blank (e.g. /dashboard/recruiter). */}
-      <main className="grow relative">{children}</main>
+      {/* ShadowGuideProvider is role-gated internally (only active for signed-in
+          candidate/recruiter accounts), so mounting it around every route here —
+          rather than duplicating it inside each authenticated <Route> — is a no-op
+          on public pages and covers /dashboard/candidate/* and /dashboard/recruiter/*. */}
+      <ShadowGuideProvider>
+        <main className="grow relative">{children}</main>
+      </ShadowGuideProvider>
       <Footer />
       <AccessibilityWidget />
     </div>

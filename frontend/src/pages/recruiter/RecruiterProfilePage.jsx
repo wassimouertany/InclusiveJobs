@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Compass, Loader2 } from "lucide-react";
 import { Button, Input } from "../../components/UI";
 import { useToast } from "../../context/ToastContext";
 import { apiClient } from "../../services/apiClient";
+import { useShadowGuide } from "../../features/guide/guideContext";
 
 const emptyForm = {
   company_name: "",
@@ -14,6 +15,7 @@ const emptyForm = {
 
 export default function RecruiterProfilePage() {
   const { showToast } = useToast();
+  const { startTour } = useShadowGuide();
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -82,7 +84,18 @@ export default function RecruiterProfilePage() {
   return (
     <div className="space-y-8">
       <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
-        <h3 className="text-xl font-bold text-gray-900 mb-6">Company Profile</h3>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-gray-900">Company Profile</h3>
+          <button
+            type="button"
+            onClick={startTour}
+            title="Revoir la visite guidée de votre espace"
+            className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/15"
+          >
+            <Compass className="h-4 w-4" aria-hidden="true" />
+            Revoir le guide
+          </button>
+        </div>
         {loading ? (
           <div className="flex items-center gap-2 text-gray-500 text-sm py-6">
             <Loader2 size={18} className="animate-spin" /> Loading company profile…

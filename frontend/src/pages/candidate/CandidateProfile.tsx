@@ -1,8 +1,9 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { motion } from "motion/react";
 import {
   Camera,
   CheckCircle,
+  Compass,
   Eye,
   FileText,
   Loader2,
@@ -19,6 +20,8 @@ import { apiClient } from "../../services/apiClient";
 import { API_BASE_URL } from "../../config/api";
 import { formatEnumLabel, initials, normalizeToStringArray } from "./shared";
 import CandidateBadges from "./CandidateBadges";
+import { emitGuideBlockage } from "../../features/guide/useBlockageDetector";
+import { useShadowGuide } from "../../features/guide/guideContext";
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -69,6 +72,15 @@ const SECTION_LABELS: Record<Section, string> = {
   documents: "Documents",
 };
 
+// Shadow Guide anchors — the tabs stay in the DOM regardless of which
+// section is active, unlike the section content itself, so the guide
+// targets these buttons rather than the (conditionally rendered) panels.
+const SECTION_GUIDE_ID: Partial<Record<Section, string>> = {
+  personal: "ai_profile_review",
+  accessibility: "accessibility_needs",
+  documents: "cv_upload",
+};
+
 // ---------------------------------------------------------------------------
 // Style helpers
 // ---------------------------------------------------------------------------
@@ -114,6 +126,7 @@ export default function CandidateProfile() {
     setAvatarLoadFailed,
   } = useCandidateDashboard();
   const { showToast } = useToast();
+  const { startTour } = useShadowGuide();
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -124,6 +137,9 @@ export default function CandidateProfile() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [disabilityCardFile, setDisabilityCardFile] = useState<File | null>(null);
+  // Tracks the previous validation pass so we can tell the Shadow Guide's
+  // blockage detector about a field that keeps failing (not just failing once).
+  const prevFieldErrorsRef = useRef<Record<string, string>>({});
 
   // Sync form from profile on mount and whenever profile refreshes
   useEffect(() => {
@@ -187,6 +203,13 @@ export default function CandidateProfile() {
   const handleSave = async () => {
     const errors = validate();
     setFieldErrors(errors);
+    const prevErrors = prevFieldErrorsRef.current;
+    for (const field of Object.keys(errors)) {
+      if (prevErrors[field] && prevErrors[field] === errors[field]) {
+        emitGuideBlockage("form_error", { field });
+      }
+    }
+    prevFieldErrorsRef.current = errors;
     if (Object.keys(errors).length > 0) return;
 
     setSaving(true);
@@ -255,6 +278,9 @@ export default function CandidateProfile() {
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
         "Failed to save profile.";
       showToast(msg, "error");
+      if (resumeFile || disabilityCardFile) {
+        emitGuideBlockage("upload_failure");
+      }
     } finally {
       setSaving(false);
     }
@@ -371,6 +397,15 @@ export default function CandidateProfile() {
                 </span>
               )}
             </div>
+            <button
+              type="button"
+              onClick={startTour}
+              title="Revoir la visite guidée de votre espace"
+              className="mt-4 inline-flex w-fit items-center gap-2 rounded-full border border-white/30 bg-white/15 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
+            >
+              <Compass className="h-4 w-4" aria-hidden="true" />
+              Revoir le guide
+            </button>
           </div>
         </div>
       </div>
@@ -390,6 +425,7 @@ export default function CandidateProfile() {
           <button
             key={s}
             type="button"
+            data-guide={SECTION_GUIDE_ID[s]}
             onClick={() => setActiveSection(s)}
             className={`flex-1 min-w-max px-5 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
               activeSection === s

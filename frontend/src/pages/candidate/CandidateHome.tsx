@@ -39,6 +39,7 @@ import {
 } from "./shared";
 import { jobOfferCompanyLogoUrl } from "../../utils/jobOfferDisplay";
 import type { CandidateProfile } from "./types";
+import GuideChecklist from "../../features/guide/GuideChecklist";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -252,6 +253,8 @@ export default function CandidateHome() {
         </div>
       </div>
 
+      <GuideChecklist />
+
       {/* ------------------------------------------------------------------ */}
       {/* 2. QUICK STATS ROW                                                   */}
       {/* ------------------------------------------------------------------ */}
@@ -326,7 +329,7 @@ export default function CandidateHome() {
       {/* ------------------------------------------------------------------ */}
       {/* 4. AI MATCHES SECTION                                                */}
       {/* ------------------------------------------------------------------ */}
-      <div>
+      <div data-guide="match_score">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-bold text-gray-900">
             Recommended for you
@@ -547,7 +550,7 @@ export default function CandidateHome() {
       {/* ------------------------------------------------------------------ */}
       {/* 5. RECENT APPLICATIONS                                               */}
       {/* ------------------------------------------------------------------ */}
-      <div>
+      <div data-guide="apply_track">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xl font-bold text-gray-900">Recent Applications</h3>
           {applications.length > 0 && (

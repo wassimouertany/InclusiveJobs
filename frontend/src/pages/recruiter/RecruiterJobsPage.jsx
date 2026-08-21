@@ -27,6 +27,7 @@ import { Button, Input } from "../../components/UI";
 import { useToast } from "../../context/ToastContext";
 import { apiClient } from "../../services/apiClient";
 import { API_BASE_URL } from "../../config/api";
+import { emitGuideBlockage } from "../../features/guide/useBlockageDetector";
 import {
   formatEnumLabel,
   hasMeaningfulHtmlText,
@@ -397,6 +398,7 @@ export default function RecruiterJobsPage() {
           readErrorDetailFromResponseLike(response.data, response.statusText),
           "error"
         );
+        if (offerForm.document) emitGuideBlockage("upload_failure");
         return;
       }
 
@@ -411,6 +413,7 @@ export default function RecruiterJobsPage() {
         isEditing ? "Could not update offer. Please try again." : "Could not create offer. Please try again.",
         "error"
       );
+      if (offerForm.document) emitGuideBlockage("upload_failure");
     } finally {
       setIsSubmittingOffer(false);
     }
@@ -843,7 +846,11 @@ export default function RecruiterJobsPage() {
             <Button variant="outline" onClick={loadOffers} disabled={offersLoading}>
               {offersLoading ? <Loader2 className="animate-spin" size={16} /> : "Refresh"}
             </Button>
-            <Button className="flex items-center gap-2" onClick={openCreateOffer}>
+            <Button
+              data-guide="offer_accommodations"
+              className="flex items-center gap-2"
+              onClick={openCreateOffer}
+            >
               <PlusCircle size={20} /> Create New Offer
             </Button>
           </div>
