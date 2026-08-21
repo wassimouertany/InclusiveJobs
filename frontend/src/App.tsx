@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MotionConfig } from "motion/react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
@@ -27,6 +28,9 @@ import CommunityPage from "./pages/community/CommunityPage";
 import CompanyDetailPage from "./pages/community/CompanyDetailPage";
 import RecruiterHomePage from "./pages/recruiter/RecruiterHomePage";
 import { ShadowGuideProvider } from "./features/guide/ShadowGuideProvider";
+import SessionExpiryBanner from "./components/SessionExpiryBanner";
+import SessionExpiredScreen from "./components/SessionExpiredScreen";
+import { useFocusMode } from "./utils/focusMode";
 
 function LandingPage() {
   return (
@@ -41,21 +45,32 @@ function LandingPage() {
 }
 
 function AppShell({ children }: { children: ReactNode }) {
+  const focusModeActive = useFocusMode();
+
   return (
-    <div className="min-h-screen flex flex-col font-sans text-text-primary bg-bg-page">
-      <Navbar />
-      {/* Avoid AnimatePresence + motion around <Routes>: it re-renders Routes with the
-          new URL during exit and can leave the main area blank (e.g. /dashboard/recruiter). */}
-      {/* ShadowGuideProvider is role-gated internally (only active for signed-in
-          candidate/recruiter accounts), so mounting it around every route here —
-          rather than duplicating it inside each authenticated <Route> — is a no-op
-          on public pages and covers /dashboard/candidate/* and /dashboard/recruiter/*. */}
-      <ShadowGuideProvider>
-        <main className="grow relative">{children}</main>
-      </ShadowGuideProvider>
-      <Footer />
-      <AccessibilityWidget />
-    </div>
+    // Focus Mode: index.css's `.ij-focus-mode` rule zeroes out CSS
+    // animations/transitions, but most motion in this app runs through
+    // Framer Motion (motion/react), which animates via the Web Animations
+    // API rather than CSS — a CSS-only rule can't stop it. MotionConfig's
+    // reducedMotion="always" is the actual kill switch for that.
+    <MotionConfig reducedMotion={focusModeActive ? "always" : "user"}>
+      <div className="min-h-screen flex flex-col font-sans text-text-primary bg-bg-page">
+        <Navbar />
+        {/* Avoid AnimatePresence + motion around <Routes>: it re-renders Routes with the
+            new URL during exit and can leave the main area blank (e.g. /dashboard/recruiter). */}
+        {/* ShadowGuideProvider is role-gated internally (only active for signed-in
+            candidate/recruiter accounts), so mounting it around every route here —
+            rather than duplicating it inside each authenticated <Route> — is a no-op
+            on public pages and covers /dashboard/candidate/* and /dashboard/recruiter/*. */}
+        <ShadowGuideProvider>
+          <main className="grow relative">{children}</main>
+        </ShadowGuideProvider>
+        <Footer />
+        <AccessibilityWidget />
+        <SessionExpiryBanner />
+        <SessionExpiredScreen />
+      </div>
+    </MotionConfig>
   );
 }
 

@@ -277,8 +277,10 @@ export default function RecruiterHomePage() {
       )}
 
       {/* ── Section 4: Quick actions ──────────────────────────────────── */}
+      {/* data-decorative: redundant with the sidebar nav (same destinations),
+          hidden in Focus Mode without creating a dead-end. */}
       {!statsLoading && stats && (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4" data-decorative="true">
           {[
             {
               bg: "bg-indigo-50 hover:bg-indigo-100",

@@ -440,7 +440,10 @@ export default function CandidateHome() {
                       aiInsightSlot={
                         <div className="space-y-3">
                           <div className="relative rounded-2xl bg-linear-to-br from-indigo-600 to-purple-700 p-5 text-white overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                            <div
+                              data-decorative="true"
+                              className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none"
+                            />
                             <div className="relative z-10">
                               <div className="flex items-center gap-2 mb-2">
                                 <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">

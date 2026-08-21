@@ -25,6 +25,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useFocusMode } from "../../utils/focusMode";
 import {
   getBlockageOptOut,
   isBlockageTypeCoolingDown,
@@ -79,6 +80,11 @@ function isTypingActive() {
 
 export function useBlockageDetector() {
   const location = useLocation();
+  // Focus Mode: entirely disabled, not just silently suppressed — a bubble
+  // popping up on inactivity is exactly the kind of interruption that's
+  // counter-productive for a TDAH/attention-focused profile. No timers, no
+  // listeners are even set up below while it's on.
+  const focusModeActive = useFocusMode();
   const [active, setActive] = useState(null); // { type, message } | null
   const optedOutRef = useRef(false);
   const lastInteractionRef = useRef(Date.now());
@@ -95,6 +101,7 @@ export function useBlockageDetector() {
 
   const tryFire = useCallback(
     (type) => {
+      if (focusModeActive) return;
       if (optedOutRef.current) return;
       if (active) return; // one bubble on screen at a time
       if (firedTypesThisSession.has(type)) return;
@@ -103,11 +110,12 @@ export function useBlockageDetector() {
       firedTypesThisSession.add(type);
       setActive({ type, message: MESSAGES[type] || "" });
     },
-    [active]
+    [active, focusModeActive]
   );
 
   // ---- Inactivity on a critical route ------------------------------------
   useEffect(() => {
+    if (focusModeActive) return undefined;
     const bump = () => {
       lastInteractionRef.current = Date.now();
     };
@@ -133,10 +141,11 @@ export function useBlockageDetector() {
       window.removeEventListener("touchstart", bump);
       if (intervalId) window.clearInterval(intervalId);
     };
-  }, [location.pathname, tryFire]);
+  }, [location.pathname, tryFire, focusModeActive]);
 
   // ---- Route ping-pong ----------------------------------------------------
   useEffect(() => {
+    if (focusModeActive) return;
     const now = Date.now();
     const history = [...routeHistoryRef.current, { path: location.pathname, time: now }].filter(
       (entry) => now - entry.time <= PINGPONG_WINDOW_MS
@@ -148,10 +157,11 @@ export function useBlockageDetector() {
         tryFire("route_pingpong");
       }
     }
-  }, [location.pathname, tryFire]);
+  }, [location.pathname, tryFire, focusModeActive]);
 
   // ---- External signals: form validation failures / upload failures ------
   useEffect(() => {
+    if (focusModeActive) return undefined;
     const onBlockage = (event) => {
       const detail = event.detail || {};
       if (detail.type === "upload_failure") {
@@ -169,7 +179,7 @@ export function useBlockageDetector() {
     };
     window.addEventListener(BLOCKAGE_EVENT, onBlockage);
     return () => window.removeEventListener(BLOCKAGE_EVENT, onBlockage);
-  }, [tryFire]);
+  }, [tryFire, focusModeActive]);
 
   // Never interrupt an active input: if the bubble is showing and the user
   // starts typing anywhere, hide it without counting it as a dismissal.
@@ -181,6 +191,12 @@ export function useBlockageDetector() {
     document.addEventListener("focusin", onFocusIn);
     return () => document.removeEventListener("focusin", onFocusIn);
   }, [active]);
+
+  // If Focus Mode is switched on while a bubble happens to be showing,
+  // dismiss it immediately — "entirely disabled" means right now too.
+  useEffect(() => {
+    if (focusModeActive) setActive(null);
+  }, [focusModeActive]);
 
   const dismiss = useCallback(() => {
     if (!active) return;

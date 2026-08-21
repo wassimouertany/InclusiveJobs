@@ -23,6 +23,7 @@ import { autoUpdate, flip, offset, shift, useFloating } from "@floating-ui/react
 import { Check, ChevronLeft, ChevronRight, Lock, Volume2, VolumeX, X } from "lucide-react";
 import { useShadowGuide } from "./guideContext";
 import { useGuideSpeech } from "./useGuideSpeech";
+import { useFocusMode } from "../../utils/focusMode";
 
 const RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 300;
@@ -72,6 +73,9 @@ export default function ShadowGuide() {
   const descId = useId();
 
   const speech = useGuideSpeech(step?.id);
+  // Focus Mode: default to the plain-language body without requiring the
+  // user to find and flip the toggle themselves first.
+  const focusModeActive = useFocusMode();
 
   // ---------------------------------------------------------------------
   // Targeting: resolve `[data-guide="..."]` for the active step, navigating
@@ -244,7 +248,8 @@ export default function ShadowGuide() {
 
   if (!isActive || !step) return null;
 
-  const bodyText = speech.simplified && step.body_simple ? step.body_simple : step.body;
+  const bodyText =
+    (speech.simplified || focusModeActive) && step.body_simple ? step.body_simple : step.body;
   const liveMessage = `Étape ${currentStep + 1} sur ${totalSteps} : ${step.title}`;
 
   const spotlightStyle = targetRect
@@ -404,11 +409,12 @@ export default function ShadowGuide() {
                 <label className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary">
                   <input
                     type="checkbox"
-                    checked={speech.simplified}
+                    checked={speech.simplified || focusModeActive}
                     onChange={speech.toggleSimplified}
-                    className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary/40"
+                    disabled={focusModeActive}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary/40 disabled:opacity-60"
                   />
-                  Langage simplifié
+                  Langage simplifié{focusModeActive ? " (Mode Focus)" : ""}
                 </label>
               </div>
 

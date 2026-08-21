@@ -24,7 +24,9 @@ import {
   RotateCcw,
   MinusCircle,
   PlusCircle,
+  Focus,
 } from "lucide-react";
+import { getFocusModeEnabled, setFocusModeEnabled } from "../utils/focusMode";
 
 const FONT_SIZE_LEVELS = ["Small", "Default", "Large", "X-Large"];
 const FONT_SCALE_VALUES = [0.875, 1, 1.125, 1.25];
@@ -91,6 +93,10 @@ export default function AccessibilityWidget() {
   const [stopAnimations, setStopAnimations] = useState(false);
   const [highlightLinks, setHighlightLinks] = useState(false);
   const [mouseY, setMouseY] = useState(0);
+  // Focus Mode is the only option here that's persisted (see utils/focusMode.ts) —
+  // everything else in this widget resets on reload, which would defeat the
+  // purpose for a mode built for memory/attention difficulties.
+  const [focusMode, setFocusMode] = useState(getFocusModeEnabled);
 
   // Persistent style: body uses CSS variables for font-scale and line-height
   useEffect(() => {
@@ -215,6 +221,11 @@ export default function AccessibilityWidget() {
       "a, button { outline: 2px solid #fef08a !important; background: rgba(254, 240, 138, 0.2) !important; }";
   }, [highlightLinks]);
 
+  // Focus Mode — see utils/focusMode.ts and .ij-focus-mode rules in index.css
+  useEffect(() => {
+    setFocusModeEnabled(focusMode);
+  }, [focusMode]);
+
   // Mouse Y for Reading Line / Reading Mask
   useEffect(() => {
     if (!readingLine && !readingMask) return;
@@ -285,6 +296,7 @@ export default function AccessibilityWidget() {
     setHighlightContent(false);
     setStopAnimations(false);
     setHighlightLinks(false);
+    setFocusMode(false);
     // Re-inject body vars style after reset
     const el = getOrCreateStyle(STYLE_IDS.bodyVars);
     el.textContent =
@@ -338,6 +350,37 @@ export default function AccessibilityWidget() {
 
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Cognitive Accessibility */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+                  Cognitive Accessibility
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setFocusMode(!focusMode)}
+                  aria-pressed={focusMode}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                    focusMode
+                      ? "bg-indigo-50 border-indigo-300"
+                      : "bg-white border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <span
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                      focusMode ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    <Focus className="w-5 h-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-gray-900">Focus Mode</span>
+                    <span className="block text-xs text-gray-500 mt-0.5">
+                      Removes distractions and animations to help you focus on one task.
+                    </span>
+                  </span>
+                </button>
+              </section>
+
               {/* Text Adjustments */}
               <section>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">

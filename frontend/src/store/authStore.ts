@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, type PersistStorage } from "zustand/middleware";
+import { clearAllSensitiveDrafts } from "../utils/formDraft";
 
 export const AUTH_TOKEN_KEY = "inclusivejobs_access_token";
 export const AUTH_ROLE_KEY = "inclusivejobs_role";
@@ -9,8 +10,15 @@ type AuthState = {
   token: string | null;
   role: string | null;
   userId: string | null;
+  // Not persisted (see partialize below) — a transient in-memory flag set by
+  // apiClient's response interceptor when a request comes back 401 "token
+  // expired/invalid". Read by SessionExpiredScreen to show an explicit
+  // re-login screen instead of redirecting mid-keystroke.
+  sessionExpired: boolean;
   setAuth: (token: string, role: string, userId: string) => void;
   clearAuth: () => void;
+  markSessionExpired: () => void;
+  clearSessionExpired: () => void;
 };
 
 type PersistedAuthState = Pick<
@@ -51,8 +59,14 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       role: null,
       userId: null,
-      setAuth: (token, role, userId) => set({ token, role, userId }),
-      clearAuth: () => set({ token: null, role: null, userId: null }),
+      sessionExpired: false,
+      setAuth: (token, role, userId) => set({ token, role, userId, sessionExpired: false }),
+      clearAuth: () => {
+        clearAllSensitiveDrafts();
+        set({ token: null, role: null, userId: null, sessionExpired: false });
+      },
+      markSessionExpired: () => set({ sessionExpired: true }),
+      clearSessionExpired: () => set({ sessionExpired: false }),
     }),
     {
       name: "inclusivejobs-auth",

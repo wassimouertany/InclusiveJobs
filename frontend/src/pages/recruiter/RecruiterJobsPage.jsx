@@ -1,12 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import {
-  AlertTriangle,
   Bookmark,
   BookmarkCheck,
-  BookmarkX,
   Briefcase,
   Building,
   CheckCircle,
@@ -24,10 +21,12 @@ import {
   X,
 } from "lucide-react";
 import { Button, Input } from "../../components/UI";
+import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import { apiClient } from "../../services/apiClient";
 import { API_BASE_URL } from "../../config/api";
 import { emitGuideBlockage } from "../../features/guide/useBlockageDetector";
+import { clearDraft, loadDraft, saveDraft } from "../../utils/formDraft";
 import {
   formatEnumLabel,
   hasMeaningfulHtmlText,
@@ -70,6 +69,11 @@ function CandidateShortlistAvatar({ candidateId, name }) {
     </div>
   );
 }
+
+// Draft of a new offer being composed — every field here describes the job,
+// not a person, so none of it is health/disability data. Safe in
+// localStorage. (Excludes `document`: a File can't survive JSON storage.)
+const NEW_OFFER_DRAFT_KEY = "recruiter_new_offer";
 
 // ---------------------------------------------------------------------------
 // RecruiterJobsPage
@@ -117,30 +121,22 @@ export default function RecruiterJobsPage() {
     loadOffers();
   }, []);
 
+  // Escape is handled by ConfirmDialog itself now — these just keep the
+  // background from scrolling under the dialog.
   useEffect(() => {
     if (!shortlistRemoveConfirm) return undefined;
-    const onKey = (e) => {
-      if (e.key === "Escape") setShortlistRemoveConfirm(null);
-    };
-    window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
   }, [shortlistRemoveConfirm]);
 
   useEffect(() => {
     if (!deleteOfferConfirm) return undefined;
-    const onKey = (e) => {
-      if (e.key === "Escape") setDeleteOfferConfirm(null);
-    };
-    window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
   }, [deleteOfferConfirm]);
@@ -169,7 +165,7 @@ export default function RecruiterJobsPage() {
       }
       setOffers(Array.isArray(response.data) ? response.data : []);
     } catch {
-      showToast("Could not load your offers. Is the API running?", "error");
+      showToast("We couldn't load your offers. Try refreshing the page.", "error");
     } finally {
       setOffersLoading(false);
     }
@@ -332,7 +328,9 @@ export default function RecruiterJobsPage() {
   const openCreateOffer = () => {
     setOfferDetail(null);
     setEditingOfferId(null);
-    setOfferForm(resetOfferForm());
+    const draft = loadDraft(NEW_OFFER_DRAFT_KEY);
+    setOfferForm(draft ? { ...resetOfferForm(), ...draft, document: null } : resetOfferForm());
+    if (draft) showToast("Brouillon restauré depuis votre dernière visite.", "info");
     setIsCreatingJob(true);
   };
 
@@ -356,13 +354,26 @@ export default function RecruiterJobsPage() {
   const closeOfferForm = () => {
     setIsCreatingJob(false);
     setEditingOfferId(null);
+    clearDraft(NEW_OFFER_DRAFT_KEY);
   };
+
+  // Debounced local draft of a *new* offer being composed — never while
+  // editing an existing one (that would overwrite the "new offer" draft with
+  // unrelated data).
+  useEffect(() => {
+    if (!isCreatingJob || editingOfferId) return undefined;
+    const id = window.setTimeout(() => {
+      const { document: _file, ...draftable } = offerForm;
+      saveDraft(NEW_OFFER_DRAFT_KEY, draftable);
+    }, 800);
+    return () => window.clearTimeout(id);
+  }, [offerForm, isCreatingJob, editingOfferId]);
 
   const handleSubmitOfferForm = async () => {
     const title = offerForm.title.trim();
     const description = normalizeRichTextHtml(offerForm.description);
     if (!title) {
-      showToast("Job title is required.", "error");
+      showToast("Enter a job title to publish this offer.", "error");
       return;
     }
 
@@ -410,7 +421,9 @@ export default function RecruiterJobsPage() {
       await loadOffers();
     } catch {
       showToast(
-        isEditing ? "Could not update offer. Please try again." : "Could not create offer. Please try again.",
+        isEditing
+          ? "We couldn't update this offer. Check your connection and try again."
+          : "We couldn't publish this offer. Check your connection and try again.",
         "error"
       );
       if (offerForm.document) emitGuideBlockage("upload_failure");
@@ -518,7 +531,7 @@ export default function RecruiterJobsPage() {
               </label>
               <textarea
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-white text-gray-900 min-h-25 focus:border-primary outline-none"
-                placeholder="Describe accommodations you can provide."
+                placeholder="Describe the accommodations you can offer to candidates with specific needs."
                 value={offerForm.possible_accommodations}
                 onChange={(e) =>
                   setOfferForm((prev) => ({
@@ -980,183 +993,6 @@ export default function RecruiterJobsPage() {
     );
   };
 
-  // ── Shortlist remove modal (unchanged) ────────────────────────────────────
-  const shortlistRemoveModal =
-    shortlistRemoveConfirm &&
-    createPortal(
-      <div
-        className="fixed inset-0 z-110 flex items-end justify-center p-4 sm:items-center sm:p-6"
-        role="presentation"
-      >
-        <button
-          type="button"
-          className="absolute inset-0 bg-gray-900/50 backdrop-blur-[2px] transition-opacity"
-          aria-label="Close dialog"
-          onClick={() => setShortlistRemoveConfirm(null)}
-        />
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="shortlist-remove-title"
-          className="relative w-full max-w-md overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-2xl shadow-gray-900/20"
-        >
-          <div className="border-b border-amber-100 bg-linear-to-r from-amber-50/90 to-orange-50/50 px-6 py-4">
-            <div className="flex items-start gap-3">
-              <div
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 ring-1 ring-amber-200/80"
-                aria-hidden
-              >
-                <AlertTriangle className="h-5 w-5" strokeWidth={2.25} />
-              </div>
-              <div className="min-w-0 pt-0.5">
-                <h2
-                  id="shortlist-remove-title"
-                  className="text-lg font-bold tracking-tight text-gray-900"
-                >
-                  Remove from shortlist?
-                </h2>
-                <p className="mt-1 text-sm text-amber-950/80">
-                  This only updates your saved list for this job — nothing is deleted from their
-                  account.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="px-6 py-5">
-            <p className="text-sm leading-relaxed text-gray-700">
-              <span className="font-semibold text-gray-900">{shortlistRemoveConfirm.displayName}</span>
-              {" will be removed from your shortlist for "}
-              <span className="font-semibold text-indigo-700">
-                {shortlistRemoveConfirm.offerTitle}
-              </span>
-              .
-            </p>
-          </div>
-
-          <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/80 px-6 py-4 sm:flex-row sm:justify-end sm:gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full border-gray-300 text-gray-800 hover:bg-white sm:w-auto"
-              onClick={() => setShortlistRemoveConfirm(null)}
-            >
-              Cancel
-            </Button>
-            <button
-              type="button"
-              disabled={removingSavedId === shortlistRemoveConfirm.candidateId}
-              onClick={() => {
-                const p = shortlistRemoveConfirm;
-                setShortlistRemoveConfirm(null);
-                removeSavedCandidate(p.offerId, p.candidateId, p.displayName, p.offerTitle);
-              }}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-transparent bg-rose-600 px-6 py-3 text-sm font-bold text-white shadow-md transition-all hover:bg-rose-700 focus:ring-4 focus:ring-rose-300/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-            >
-              {removingSavedId === shortlistRemoveConfirm.candidateId ? (
-                <>
-                  <Loader2 className="animate-spin" size={18} />
-                  Removing…
-                </>
-              ) : (
-                <>
-                  <BookmarkX size={18} strokeWidth={2.25} />
-                  Remove from shortlist
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-
-  // ── Delete offer confirmation modal ──────────────────────────────────────
-  const deleteOfferModal =
-    deleteOfferConfirm &&
-    createPortal(
-      <div
-        className="fixed inset-0 z-110 flex items-end justify-center p-4 sm:items-center sm:p-6"
-        role="presentation"
-      >
-        <button
-          type="button"
-          className="absolute inset-0 bg-gray-900/50 backdrop-blur-[2px] transition-opacity"
-          aria-label="Close dialog"
-          onClick={() => setDeleteOfferConfirm(null)}
-        />
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-offer-title"
-          className="relative w-full max-w-md overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-2xl shadow-gray-900/20"
-        >
-          <div className="border-b border-red-100 bg-linear-to-r from-red-50/90 to-rose-50/50 px-6 py-4">
-            <div className="flex items-start gap-3">
-              <div
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700 ring-1 ring-red-200/80"
-                aria-hidden
-              >
-                <Trash2 className="h-5 w-5" strokeWidth={2.25} />
-              </div>
-              <div className="min-w-0 pt-0.5">
-                <h2
-                  id="delete-offer-title"
-                  className="text-lg font-bold tracking-tight text-gray-900"
-                >
-                  Delete this job offer?
-                </h2>
-                <p className="mt-1 text-sm text-red-950/70">
-                  This action is permanent and cannot be undone.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="px-6 py-5">
-            <p className="text-sm leading-relaxed text-gray-700">
-              <span className="font-semibold text-gray-900">"{deleteOfferConfirm.title}"</span>
-              {" and all of its applications, AI matches, and saved candidates will be permanently removed."}
-            </p>
-          </div>
-
-          <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50/80 px-6 py-4 sm:flex-row sm:justify-end sm:gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full border-gray-300 text-gray-800 hover:bg-white sm:w-auto"
-              onClick={() => setDeleteOfferConfirm(null)}
-            >
-              Cancel
-            </Button>
-            <button
-              type="button"
-              disabled={deletingOfferId === deleteOfferConfirm.offerId}
-              onClick={() => {
-                const p = deleteOfferConfirm;
-                setDeleteOfferConfirm(null);
-                performDeleteOffer(p.offerId);
-              }}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-transparent bg-red-600 px-6 py-3 text-sm font-bold text-white shadow-md transition-all hover:bg-red-700 focus:ring-4 focus:ring-red-300/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-            >
-              {deletingOfferId === deleteOfferConfirm.offerId ? (
-                <>
-                  <Loader2 className="animate-spin" size={18} />
-                  Deleting…
-                </>
-              ) : (
-                <>
-                  <Trash2 size={18} strokeWidth={2.25} />
-                  Delete permanently
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-
   return (
     <>
       <motion.div
@@ -1171,8 +1007,36 @@ export default function RecruiterJobsPage() {
       >
         {renderJobs()}
       </motion.div>
-      {shortlistRemoveModal}
-      {deleteOfferModal}
+
+      <ConfirmDialog
+        open={Boolean(shortlistRemoveConfirm)}
+        title={`Voulez-vous vraiment retirer ${shortlistRemoveConfirm?.displayName ?? "ce candidat"} de votre liste ?`}
+        description={`Cette action est réversible. Vous pourrez l'ajouter à nouveau depuis "AI Match" pour "${shortlistRemoveConfirm?.offerTitle ?? "cette offre"}". Son compte n'est pas affecté.`}
+        confirmLabel="Retirer"
+        destructive={false}
+        busy={removingSavedId === shortlistRemoveConfirm?.candidateId}
+        onCancel={() => setShortlistRemoveConfirm(null)}
+        onConfirm={() => {
+          const p = shortlistRemoveConfirm;
+          setShortlistRemoveConfirm(null);
+          removeSavedCandidate(p.offerId, p.candidateId, p.displayName, p.offerTitle);
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteOfferConfirm)}
+        title={`Voulez-vous vraiment supprimer l'offre "${deleteOfferConfirm?.title ?? ""}" ?`}
+        description="Cette action est définitive. Les candidatures et correspondances IA liées à cette offre seront aussi supprimées."
+        confirmLabel="Supprimer"
+        destructive
+        busy={deletingOfferId === deleteOfferConfirm?.offerId}
+        onCancel={() => setDeleteOfferConfirm(null)}
+        onConfirm={() => {
+          const p = deleteOfferConfirm;
+          setDeleteOfferConfirm(null);
+          performDeleteOffer(p.offerId);
+        }}
+      />
     </>
   );
 }

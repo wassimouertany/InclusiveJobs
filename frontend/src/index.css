@@ -78,3 +78,38 @@ body {
   left: 0;
   animation: recommendation-shimmer 1.75s ease-in-out infinite;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Focus Mode — AccessibilityWidget.tsx toggles `.ij-focus-mode` on <body> */
+/* ---------------------------------------------------------------------- */
+/*
+ * Never targets: the accessibility widget itself (#, its button/panel carry
+ * no `[data-decorative]`), primary navigation, back buttons, error text, or
+ * field labels — this stylesheet only ever (a) kills motion globally and
+ * (b) hides elements that a component has explicitly opted into via
+ * `data-decorative="true"`, chosen individually and reviewed by hand. It
+ * never guesses at a selector for "the sidebar" or "the FAB".
+ */
+.ij-focus-mode,
+.ij-focus-mode *,
+.ij-focus-mode *::before,
+.ij-focus-mode *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+/* Flatten decorative gradients (banners, glow cards) to a neutral surface —
+   semantic status colors (bg-red-50, bg-green-50, badges…) are plain fills,
+   not gradients, so they're untouched and stay meaningful. */
+.ij-focus-mode [class*="bg-linear-to-"],
+.ij-focus-mode [class*="bg-gradient-to-"] {
+  background-image: none !important;
+  background-color: var(--color-bg-card) !important;
+}
+
+.ij-focus-mode [data-decorative="true"] {
+  display: none !important;
+}

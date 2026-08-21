@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "../../store/authStore";
+import { getFocusModeEnabled } from "../../utils/focusMode";
 import { UserRole } from "../../types";
 import { TOURS } from "./tours.config";
 import {
@@ -70,7 +71,17 @@ export function ShadowGuideProvider({ children }) {
       return;
     }
     setIsActive(false);
-    if (progress.status === "not_started" && !isDismissed(tourId) && !welcomeDismissedThisSession) {
+    // Focus Mode: never self-offer the tour, however welcome it'd normally
+    // be — an unexpected modal is exactly the kind of interruption Focus
+    // Mode exists to remove. Still reachable manually (startTour(), e.g.
+    // from "Revoir le guide" in the profile menu).
+    const focusModeActive = getFocusModeEnabled();
+    if (
+      !focusModeActive &&
+      progress.status === "not_started" &&
+      !isDismissed(tourId) &&
+      !welcomeDismissedThisSession
+    ) {
       setShowWelcome(true);
     } else {
       setShowWelcome(false);

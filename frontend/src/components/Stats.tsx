@@ -12,7 +12,7 @@ export default function Stats() {
   const { navigate } = useNavigation();
 
   return (
-    <section className="bg-white border-y border-border">
+    <section className="bg-white border-y border-border" data-decorative="true">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-2 md:grid-cols-4">
           {stats.map((stat, index) => (

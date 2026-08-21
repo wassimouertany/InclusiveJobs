@@ -22,6 +22,7 @@ import { formatEnumLabel, initials, normalizeToStringArray } from "./shared";
 import CandidateBadges from "./CandidateBadges";
 import { emitGuideBlockage } from "../../features/guide/useBlockageDetector";
 import { useShadowGuide } from "../../features/guide/guideContext";
+import { clearDraft, loadDraft, saveDraft } from "../../utils/formDraft";
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -112,6 +113,28 @@ function arrChanged(a: string[], b: string[]): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Draft persistence — privacy split (see utils/formDraft.ts)
+// ---------------------------------------------------------------------------
+// Disability/health/specific-needs fields never touch localStorage: they're
+// drafted to sessionStorage only, and wiped on submit and on logout. Every
+// other field is neutral professional/contact info and may survive in
+// localStorage across sessions.
+
+const PROFILE_DRAFT_KEY = "candidate_profile";
+const SENSITIVE_FIELDS = ["disability_type", "accessibility_needs", "work_accommodations"] as const;
+type SensitiveField = (typeof SENSITIVE_FIELDS)[number];
+type SensitiveDraft = Pick<FormState, SensitiveField>;
+type NeutralDraft = Omit<FormState, SensitiveField>;
+
+function splitDraft(form: FormState): { neutral: NeutralDraft; sensitive: SensitiveDraft } {
+  const { disability_type, accessibility_needs, work_accommodations, ...neutral } = form;
+  return {
+    neutral,
+    sensitive: { disability_type, accessibility_needs, work_accommodations },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -140,6 +163,10 @@ export default function CandidateProfile() {
   // Tracks the previous validation pass so we can tell the Shadow Guide's
   // blockage detector about a field that keeps failing (not just failing once).
   const prevFieldErrorsRef = useRef<Record<string, string>>({});
+  // Guards the draft-restore effect so it only ever runs once, right after
+  // the first server sync — not on every subsequent profile refresh (which
+  // would otherwise re-inject a possibly-stale draft over fresh edits).
+  const draftRestoredRef = useRef(false);
 
   // Sync form from profile on mount and whenever profile refreshes
   useEffect(() => {
@@ -162,6 +189,32 @@ export default function CandidateProfile() {
     });
   }, [profile]);
 
+  // Restore a local draft on top of the server data — once. Lets someone
+  // pick up exactly where they left off after a reload or an expired
+  // session, without ever having silently lost what they'd typed.
+  useEffect(() => {
+    if (!profile || draftRestoredRef.current) return;
+    draftRestoredRef.current = true;
+    const neutral = loadDraft<NeutralDraft>(PROFILE_DRAFT_KEY);
+    const sensitive = loadDraft<SensitiveDraft>(PROFILE_DRAFT_KEY, { sensitive: true });
+    if (neutral || sensitive) {
+      setForm((f) => ({ ...f, ...(neutral ?? {}), ...(sensitive ?? {}) }));
+      showToast("Brouillon restauré depuis votre dernière visite.", "info");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile]);
+
+  // Debounced local draft — keeps sensitive fields out of localStorage.
+  useEffect(() => {
+    if (!draftRestoredRef.current) return; // wait for the restore pass above
+    const id = window.setTimeout(() => {
+      const { neutral, sensitive } = splitDraft(form);
+      saveDraft(PROFILE_DRAFT_KEY, neutral);
+      saveDraft(PROFILE_DRAFT_KEY, sensitive, { sensitive: true });
+    }, 800);
+    return () => window.clearTimeout(id);
+  }, [form]);
+
   // ── Immediate photo upload from banner ────────────────────────────────────
 
   const handlePhotoChange = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -175,7 +228,7 @@ export default function CandidateProfile() {
       await loadProfile();
       showToast("Photo updated successfully!", "success");
     } catch {
-      showToast("Failed to upload photo.", "error");
+      showToast("We couldn't upload your photo. Try a smaller image or a different format.", "error");
     } finally {
       setPhotoUploading(false);
       e.target.value = "";
@@ -187,14 +240,14 @@ export default function CandidateProfile() {
   const validate = (): Record<string, string> => {
     const errors: Record<string, string> = {};
     if (form.first_name !== "" && !form.first_name.trim())
-      errors.first_name = "First name cannot be empty.";
+      errors.first_name = "Enter your first name to continue.";
     if (form.last_name !== "" && !form.last_name.trim())
-      errors.last_name = "Last name cannot be empty.";
+      errors.last_name = "Enter your last name to continue.";
     const yoe = Number(form.years_of_experience);
     if (!Number.isInteger(yoe) || yoe < 0 || yoe > 50)
-      errors.years_of_experience = "Must be between 0 and 50.";
+      errors.years_of_experience = "Enter a number of years between 0 and 50.";
     if (form.phone_number.trim() && form.phone_number.trim().length < 6)
-      errors.phone_number = "Enter a valid phone number.";
+      errors.phone_number = "Enter a phone number with at least 6 digits.";
     return errors;
   };
 
@@ -260,6 +313,8 @@ export default function CandidateProfile() {
       setPhotoFile(null);
       setResumeFile(null);
       setDisabilityCardFile(null);
+      clearDraft(PROFILE_DRAFT_KEY);
+      clearDraft(PROFILE_DRAFT_KEY, { sensitive: true });
       showToast("Profile updated successfully!", "success");
       const profileComplete =
         !!(profile?.logo_id || photoFile) &&
@@ -276,7 +331,7 @@ export default function CandidateProfile() {
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        "Failed to save profile.";
+        "We couldn't save your profile. Check your connection and try again.";
       showToast(msg, "error");
       if (resumeFile || disabilityCardFile) {
         emitGuideBlockage("upload_failure");
@@ -413,7 +468,7 @@ export default function CandidateProfile() {
       {/* ================================================================ */}
       {/* ACHIEVEMENTS                                                     */}
       {/* ================================================================ */}
-      <div className="bg-white rounded-3xl p-6 border border-teal-50 shadow-sm">
+      <div className="bg-white rounded-3xl p-6 border border-teal-50 shadow-sm" data-decorative="true">
         <CandidateBadges />
       </div>
 
@@ -729,7 +784,7 @@ export default function CandidateProfile() {
                 value={form.accessibility_needs}
                 onChange={(e) => setForm((f) => ({ ...f, accessibility_needs: e.target.value }))}
                 disabled={saving}
-                placeholder="Describe your specific accessibility requirements…"
+                placeholder="Describe the accommodations that would help you at work…"
                 className={`${INPUT_BASE} resize-none ${saving ? INPUT_DISABLED : ""}`}
               />
             </div>

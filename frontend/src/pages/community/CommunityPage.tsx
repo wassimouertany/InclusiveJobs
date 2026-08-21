@@ -6,6 +6,7 @@ import { apiClient } from "../../services/apiClient";
 import { API_BASE_URL } from "../../config/api";
 import { useAuthStore } from "../../store/authStore";
 import { useToast } from "../../context/ToastContext";
+import ConfirmDialog from "../../components/ConfirmDialog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -266,7 +267,7 @@ function StoryCard({
   onReact: (id: string, r: ReactionKey) => void;
   onDelete: (id: string) => void;
   onPostComment: (storyId: string, content: string, anon: boolean) => Promise<Comment | null>;
-  onDeleteComment: (storyId: string, commentId: string) => Promise<boolean>;
+  onDeleteComment: (storyId: string, commentId: string) => void;
 }) {
   const isOwner = !!currentUserId && currentUserId === story.author_id;
   const [expanded, setExpanded] = useState(false);
@@ -523,7 +524,7 @@ function StoriesFeed({
   onLoadMore: () => void;
   onOpenModal: () => void;
   onPostComment: (storyId: string, content: string, anon: boolean) => Promise<Comment | null>;
-  onDeleteComment: (storyId: string, commentId: string) => Promise<boolean>;
+  onDeleteComment: (storyId: string, commentId: string) => void;
 }) {
   if (loading) {
     return (
@@ -812,6 +813,15 @@ export default function CommunityPage() {
   const [newStoryAnonymous, setNewStoryAnonymous] = useState(false);
   const [posting,           setPosting]           = useState(false);
 
+  // delete confirmations — both permanent, both go through ConfirmDialog
+  const [deleteStoryConfirm, setDeleteStoryConfirm] = useState<{ storyId: string } | null>(null);
+  const [deleteCommentConfirm, setDeleteCommentConfirm] = useState<{
+    storyId: string;
+    commentId: string;
+  } | null>(null);
+  const [deletingStory, setDeletingStory] = useState(false);
+  const [deletingComment, setDeletingComment] = useState(false);
+
   // champions
   const [recruiters,        setRecruiters]        = useState<Recruiter[]>([]);
   const [loadingRecruiters, setLoadingRecruiters] = useState(false);
@@ -888,14 +898,19 @@ export default function CommunityPage() {
   };
 
   // ── Delete story ───────────────────────────────────────────────────────
-  const handleDelete = async (storyId: string) => {
-    if (!window.confirm("Delete this story?")) return;
+  // Opens the confirmation — the actual delete only runs from its onConfirm.
+  const requestDeleteStory = (storyId: string) => setDeleteStoryConfirm({ storyId });
+
+  const performDeleteStory = async (storyId: string) => {
+    setDeletingStory(true);
     try {
       await apiClient.delete(`/stories/${storyId}`);
       setStories((prev) => prev.filter((s) => s._id !== storyId));
-      showToast({ message: "Story deleted.", type: "info" });
+      showToast({ message: "Témoignage supprimé.", type: "info" });
     } catch {
-      showToast({ message: "Failed to delete story.", type: "error" });
+      showToast({ message: "La suppression a échoué. Réessayez.", type: "error" });
+    } finally {
+      setDeletingStory(false);
     }
   };
 
@@ -925,10 +940,11 @@ export default function CommunityPage() {
   };
 
   // ── Delete comment ─────────────────────────────────────────────────────
-  const handleDeleteComment = async (
-    storyId: string,
-    commentId: string,
-  ): Promise<boolean> => {
+  const requestDeleteComment = (storyId: string, commentId: string) =>
+    setDeleteCommentConfirm({ storyId, commentId });
+
+  const performDeleteComment = async (storyId: string, commentId: string) => {
+    setDeletingComment(true);
     try {
       await apiClient.delete(`/stories/${storyId}/comments/${commentId}`);
       setStories((prev) =>
@@ -938,10 +954,10 @@ export default function CommunityPage() {
             : s,
         ),
       );
-      return true;
     } catch {
-      showToast({ message: "Failed to delete comment", type: "error" });
-      return false;
+      showToast({ message: "La suppression a échoué. Réessayez.", type: "error" });
+    } finally {
+      setDeletingComment(false);
     }
   };
 
@@ -1001,11 +1017,11 @@ export default function CommunityPage() {
             currentUserId={userId}
             currentUserRole={role}
             onReact={handleReact}
-            onDelete={handleDelete}
+            onDelete={requestDeleteStory}
             onLoadMore={handleLoadMore}
             onOpenModal={() => setShowWriteModal(true)}
             onPostComment={handlePostComment}
-            onDeleteComment={handleDeleteComment}
+            onDeleteComment={requestDeleteComment}
           />
         ) : (
           <ChampionsTab
@@ -1030,6 +1046,36 @@ export default function CommunityPage() {
           />
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={Boolean(deleteStoryConfirm)}
+        title="Voulez-vous vraiment supprimer ce témoignage ?"
+        description="Cette action est définitive. Les réactions et commentaires liés seront aussi supprimés."
+        confirmLabel="Supprimer"
+        destructive
+        busy={deletingStory}
+        onCancel={() => setDeleteStoryConfirm(null)}
+        onConfirm={() => {
+          const p = deleteStoryConfirm;
+          setDeleteStoryConfirm(null);
+          if (p) performDeleteStory(p.storyId);
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteCommentConfirm)}
+        title="Voulez-vous vraiment supprimer ce commentaire ?"
+        description="Cette action est définitive et ne peut pas être annulée."
+        confirmLabel="Supprimer"
+        destructive
+        busy={deletingComment}
+        onCancel={() => setDeleteCommentConfirm(null)}
+        onConfirm={() => {
+          const p = deleteCommentConfirm;
+          setDeleteCommentConfirm(null);
+          if (p) performDeleteComment(p.storyId, p.commentId);
+        }}
+      />
     </div>
   );
 }
