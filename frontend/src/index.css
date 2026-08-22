@@ -113,3 +113,16 @@ body {
 .ij-focus-mode [data-decorative="true"] {
   display: none !important;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Lecture par sélection — surlignage du mot en cours (voir                */
+/* features/text-to-speech/HighlightOverlay.tsx). ::highlight() ne peut     */
+/* être ciblé qu'en CSS global — jamais de couleur seule : fond teinté +   */
+/* soulignement, pour rester visible même sans perception des couleurs.    */
+/* ---------------------------------------------------------------------- */
+::highlight(ij-tts-word) {
+  background-color: rgba(13, 148, 136, 0.28);
+  text-decoration-line: underline;
+  text-decoration-color: #0d9488;
+  text-decoration-thickness: 2px;
+}

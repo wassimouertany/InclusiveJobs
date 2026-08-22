@@ -1,13 +1,18 @@
 // useGuideSpeech.js
 //
-// Lecture à voix haute d'une étape via l'API SpeechSynthesis du navigateur
-// (voix française — lang "fr-FR"), plus le toggle "langage simplifié" qui
-// bascule entre `step.body` et `step.body_simple` dans tours.config.js. La
-// préférence est persistée via guideStorage (seul point d'écriture).
+// Lecture à voix haute d'une étape du Shadow Guide (voix française —
+// lang "fr-FR"), plus le toggle "langage simplifié" qui bascule entre
+// `step.body` et `step.body_simple` dans tours.config.js. La préférence est
+// persistée via guideStorage (seul point d'écriture).
 //
-// Dégradation silencieuse : si `window.speechSynthesis` n'existe pas
-// (navigateur non supporté, contexte non sécurisé), `supported` vaut false et
-// `speak()` ne fait rien — aucune erreur, aucun bouton cassé.
+// Passe entièrement par lib/speechManager.ts, avec priorité "system" — une
+// lecture du guide interrompt proprement une lecture par sélection en cours
+// (voir features/text-to-speech/), jamais l'inverse. Ce fichier n'appelle
+// plus jamais `window.speechSynthesis` directement.
+//
+// Dégradation silencieuse : si la synthèse vocale n'est pas supportée par le
+// navigateur, `supported` vaut false et `speak()` ne fait rien — aucune
+// erreur, aucun bouton cassé.
 //
 // Note : le widget d'accessibilité existant (AccessibilityWidget.tsx) n'a pas
 // de "mode vocal" à ce jour, donc rien ne déclenche `speak()` automatiquement
@@ -15,19 +20,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSimplifiedLanguage, setSimplifiedLanguage } from "./guideStorage";
+import { speechManager } from "../../lib/speechManager";
 
 const SPEECH_LANG = "fr-FR";
 
-function speechSupported() {
-  return (
-    typeof window !== "undefined" &&
-    "speechSynthesis" in window &&
-    typeof window.SpeechSynthesisUtterance === "function"
-  );
-}
-
 export function useGuideSpeech(resetKey) {
-  const supported = speechSupported();
+  const supported = speechManager.isSupported;
   const [speaking, setSpeaking] = useState(false);
   const [simplified, setSimplified] = useState(() => {
     try {
@@ -36,33 +34,29 @@ export function useGuideSpeech(resetKey) {
       return false;
     }
   });
-  const utteranceRef = useRef(null);
+  const handleRef = useRef(null);
 
   const stop = useCallback(() => {
-    if (!supported) return;
-    try {
-      window.speechSynthesis.cancel();
-    } catch {
-      // Some browsers throw when cancelling with nothing queued — ignore.
-    }
+    handleRef.current?.cancel();
+    handleRef.current = null;
     setSpeaking(false);
-  }, [supported]);
+  }, []);
 
   const speak = useCallback(
     (text) => {
       if (!supported || !text || !text.trim()) return;
-      try {
-        window.speechSynthesis.cancel();
-        const utterance = new window.SpeechSynthesisUtterance(text);
-        utterance.lang = SPEECH_LANG;
-        utterance.onend = () => setSpeaking(false);
-        utterance.onerror = () => setSpeaking(false);
-        utteranceRef.current = utterance;
-        setSpeaking(true);
-        window.speechSynthesis.speak(utterance);
-      } catch {
+      const handle = speechManager.speak(text, {
+        lang: SPEECH_LANG,
+        priority: "system",
+        onEnd: () => setSpeaking(false),
+        onError: () => setSpeaking(false),
+      });
+      if (handle.status === "rejected") {
         setSpeaking(false);
+        return;
       }
+      handleRef.current = handle;
+      setSpeaking(true);
     },
     [supported]
   );

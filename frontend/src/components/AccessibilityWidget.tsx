@@ -25,8 +25,10 @@ import {
   MinusCircle,
   PlusCircle,
   Focus,
+  Volume2,
 } from "lucide-react";
 import { getFocusModeEnabled, setFocusModeEnabled } from "../utils/focusMode";
+import { getSelectionSpeechEnabled, setSelectionSpeechEnabled } from "../utils/selectionSpeechPref";
 
 const FONT_SIZE_MIN = 75;
 const FONT_SIZE_MAX = 200;
@@ -99,6 +101,11 @@ export default function AccessibilityWidget() {
   // everything else in this widget resets on reload, which would defeat the
   // purpose for a mode built for memory/attention difficulties.
   const [focusMode, setFocusMode] = useState(getFocusModeEnabled);
+  // "Lecture par sélection" — off by default, like every other option here.
+  // When on, AppShell (App.tsx) mounts TextToSpeechSelection globally
+  // (containerRef = document.body): selecting >= 3 characters anywhere on
+  // the site offers a button to read it aloud.
+  const [selectionSpeech, setSelectionSpeech] = useState(getSelectionSpeechEnabled);
 
   // Persistent style: body uses CSS variables for font-scale and line-height
   useEffect(() => {
@@ -228,6 +235,11 @@ export default function AccessibilityWidget() {
     setFocusModeEnabled(focusMode);
   }, [focusMode]);
 
+  // Lecture par sélection — see utils/selectionSpeechPref.ts
+  useEffect(() => {
+    setSelectionSpeechEnabled(selectionSpeech);
+  }, [selectionSpeech]);
+
   // Mouse Y for Reading Line / Reading Mask
   useEffect(() => {
     if (!readingLine && !readingMask) return;
@@ -299,6 +311,7 @@ export default function AccessibilityWidget() {
     setStopAnimations(false);
     setHighlightLinks(false);
     setFocusMode(false);
+    setSelectionSpeech(false);
     // Re-inject body vars style after reset
     const el = getOrCreateStyle(STYLE_IDS.bodyVars);
     el.textContent =
@@ -378,6 +391,31 @@ export default function AccessibilityWidget() {
                     <span className="block text-sm font-bold text-gray-900">Focus Mode</span>
                     <span className="block text-xs text-gray-500 mt-0.5">
                       Removes distractions and animations to help you focus on one task.
+                    </span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectionSpeech(!selectionSpeech)}
+                  aria-pressed={selectionSpeech}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all mt-3 ${
+                    selectionSpeech
+                      ? "bg-indigo-50 border-indigo-300"
+                      : "bg-white border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <span
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                      selectionSpeech ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    <Volume2 className="w-5 h-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-gray-900">Read on Selection</span>
+                    <span className="block text-xs text-gray-500 mt-0.5">
+                      Select any text on the site to hear it read aloud.
                     </span>
                   </span>
                 </button>

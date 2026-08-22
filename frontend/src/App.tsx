@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { MotionConfig } from "motion/react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar";
@@ -31,6 +31,8 @@ import { ShadowGuideProvider } from "./features/guide/ShadowGuideProvider";
 import SessionExpiryBanner from "./components/SessionExpiryBanner";
 import SessionExpiredScreen from "./components/SessionExpiredScreen";
 import { useFocusMode } from "./utils/focusMode";
+import { useSelectionSpeechEnabled } from "./utils/selectionSpeechPref";
+import TextToSpeechSelection from "./features/text-to-speech/TextToSpeechSelection";
 
 function LandingPage() {
   return (
@@ -46,6 +48,9 @@ function LandingPage() {
 
 function AppShell({ children }: { children: ReactNode }) {
   const focusModeActive = useFocusMode();
+  const selectionSpeechEnabled = useSelectionSpeechEnabled();
+  // Stable across renders — document.body exists for the lifetime of this SPA.
+  const bodyRef = useRef<HTMLElement | null>(typeof document !== "undefined" ? document.body : null);
 
   return (
     // Focus Mode: index.css's `.ij-focus-mode` rule zeroes out CSS
@@ -69,6 +74,11 @@ function AppShell({ children }: { children: ReactNode }) {
         <AccessibilityWidget />
         <SessionExpiryBanner />
         <SessionExpiredScreen />
+        {/* "Read on Selection" toggle in AccessibilityWidget — off by default.
+            Mounted only while enabled, so zero selectionchange listeners run
+            otherwise (same "entirely disabled, not just quiet" principle as
+            Focus Mode's other integrations). */}
+        {selectionSpeechEnabled ? <TextToSpeechSelection containerRef={bodyRef} /> : null}
       </div>
     </MotionConfig>
   );
