@@ -26,9 +26,17 @@ import {
   PlusCircle,
   Focus,
   Volume2,
+  ZoomIn,
 } from "lucide-react";
 import { getFocusModeEnabled, setFocusModeEnabled } from "../utils/focusMode";
 import { getSelectionSpeechEnabled, setSelectionSpeechEnabled } from "../utils/selectionSpeechPref";
+import {
+  MAGNIFIER_ZOOM_DEFAULT,
+  MAGNIFIER_ZOOM_MAX,
+  MAGNIFIER_ZOOM_MIN,
+  MAGNIFIER_ZOOM_STEP,
+  useMagnifierPrefs,
+} from "../utils/magnifierPref";
 
 const FONT_SIZE_MIN = 75;
 const FONT_SIZE_MAX = 200;
@@ -106,6 +114,11 @@ export default function AccessibilityWidget() {
   // (containerRef = document.body): selecting >= 3 characters anywhere on
   // the site offers a button to read it aloud.
   const [selectionSpeech, setSelectionSpeech] = useState(getSelectionSpeechEnabled);
+  // Screen Magnifier — see features/magnifier/ScreenMagnifier.tsx (mounted
+  // globally in App.tsx) and utils/magnifierPref.ts. Off by default, like
+  // every other option here; persisted (state, zoom, dim) like Focus Mode
+  // and Read on Selection above.
+  const [magnifierPrefs, setMagnifierPrefs] = useMagnifierPrefs();
 
   // Persistent style: body uses CSS variables for font-scale and line-height
   useEffect(() => {
@@ -312,6 +325,7 @@ export default function AccessibilityWidget() {
     setHighlightLinks(false);
     setFocusMode(false);
     setSelectionSpeech(false);
+    setMagnifierPrefs({ enabled: false, zoom: MAGNIFIER_ZOOM_DEFAULT, dimBackground: false });
     // Re-inject body vars style after reset
     const el = getOrCreateStyle(STYLE_IDS.bodyVars);
     el.textContent =
@@ -639,6 +653,92 @@ export default function AccessibilityWidget() {
                     <span className="text-xs font-medium">Highlight Links</span>
                   </button>
                 </div>
+              </section>
+
+              {/* Screen Magnifier */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+                  Loupe d'écran
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setMagnifierPrefs({ enabled: !magnifierPrefs.enabled })}
+                  aria-pressed={magnifierPrefs.enabled}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                    magnifierPrefs.enabled
+                      ? "bg-indigo-50 border-indigo-300"
+                      : "bg-white border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <span
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                      magnifierPrefs.enabled ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    <ZoomIn className="w-5 h-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-gray-900">Loupe d'écran</span>
+                    <span className="block text-xs text-gray-500 mt-0.5">
+                      Bande agrandie qui suit la souris, le clavier (Tab) et le guide. Raccourci : Alt+Z.
+                    </span>
+                  </span>
+                </button>
+
+                {magnifierPrefs.enabled && (
+                  <>
+                    <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 mt-3">
+                      <div className="text-sm text-gray-600 mb-2 font-medium">Grossissement</div>
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={() =>
+                            setMagnifierPrefs({
+                              zoom: Math.max(MAGNIFIER_ZOOM_MIN, magnifierPrefs.zoom - MAGNIFIER_ZOOM_STEP),
+                            })
+                          }
+                          disabled={magnifierPrefs.zoom <= MAGNIFIER_ZOOM_MIN}
+                          aria-label="Réduire le grossissement"
+                          className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        >
+                          <MinusCircle className="w-5 h-5" />
+                        </button>
+                        <span className="text-sm font-semibold text-gray-900 w-20 text-center">
+                          {magnifierPrefs.zoom}%
+                        </span>
+                        <button
+                          onClick={() =>
+                            setMagnifierPrefs({
+                              zoom: Math.min(MAGNIFIER_ZOOM_MAX, magnifierPrefs.zoom + MAGNIFIER_ZOOM_STEP),
+                            })
+                          }
+                          disabled={magnifierPrefs.zoom >= MAGNIFIER_ZOOM_MAX}
+                          aria-label="Augmenter le grossissement"
+                          className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        >
+                          <PlusCircle className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <label className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 mt-3 cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        checked={magnifierPrefs.dimBackground}
+                        onChange={(e) => setMagnifierPrefs({ dimBackground: e.target.checked })}
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-xs text-gray-600">
+                        Atténuer le reste de la page pendant l'agrandissement
+                      </span>
+                    </label>
+                  </>
+                )}
+
+                <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                  Cette loupe complète, sans le remplacer, le zoom du navigateur (Ctrl + molette) et la
+                  loupe de votre système d'exploitation — tous deux plus performants pour un usage
+                  prolongé car ils réagencent le texte.
+                </p>
               </section>
             </div>
 

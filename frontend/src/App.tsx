@@ -33,6 +33,7 @@ import SessionExpiredScreen from "./components/SessionExpiredScreen";
 import { useFocusMode } from "./utils/focusMode";
 import { useSelectionSpeechEnabled } from "./utils/selectionSpeechPref";
 import TextToSpeechSelection from "./features/text-to-speech/TextToSpeechSelection";
+import ScreenMagnifier from "./features/magnifier/ScreenMagnifier";
 
 function LandingPage() {
   return (
@@ -51,6 +52,17 @@ function AppShell({ children }: { children: ReactNode }) {
   const selectionSpeechEnabled = useSelectionSpeechEnabled();
   // Stable across renders — document.body exists for the lifetime of this SPA.
   const bodyRef = useRef<HTMLElement | null>(typeof document !== "undefined" ? document.body : null);
+  // ScreenMagnifier transforms/clips this exact node while active (see
+  // features/magnifier/ScreenMagnifier.tsx). It has to be the real, single
+  // app content — never cloned — so everything below (Navbar, routes,
+  // Footer) lives inside it. AccessibilityWidget, SessionExpiryBanner and
+  // SessionExpiredScreen are deliberately siblings OUTSIDE this div instead
+  // of children of it: a CSS transform on an ancestor becomes the
+  // containing block for its `position: fixed` descendants, which would
+  // sweep the widget's toggle button into the loupe's transform/clip-path
+  // and make it unreachable — the one thing the brief says must never
+  // happen.
+  const stageRef = useRef<HTMLDivElement | null>(null);
 
   return (
     // Focus Mode: index.css's `.ij-focus-mode` rule zeroes out CSS
@@ -59,7 +71,7 @@ function AppShell({ children }: { children: ReactNode }) {
     // API rather than CSS — a CSS-only rule can't stop it. MotionConfig's
     // reducedMotion="always" is the actual kill switch for that.
     <MotionConfig reducedMotion={focusModeActive ? "always" : "user"}>
-      <div className="min-h-screen flex flex-col font-sans text-text-primary bg-bg-page">
+      <div ref={stageRef} id="ij-magnifier-stage" className="min-h-screen flex flex-col font-sans text-text-primary bg-bg-page">
         <Navbar />
         {/* Avoid AnimatePresence + motion around <Routes>: it re-renders Routes with the
             new URL during exit and can leave the main area blank (e.g. /dashboard/recruiter). */}
@@ -71,15 +83,16 @@ function AppShell({ children }: { children: ReactNode }) {
           <main className="grow relative">{children}</main>
         </ShadowGuideProvider>
         <Footer />
-        <AccessibilityWidget />
-        <SessionExpiryBanner />
-        <SessionExpiredScreen />
-        {/* "Read on Selection" toggle in AccessibilityWidget — off by default.
-            Mounted only while enabled, so zero selectionchange listeners run
-            otherwise (same "entirely disabled, not just quiet" principle as
-            Focus Mode's other integrations). */}
-        {selectionSpeechEnabled ? <TextToSpeechSelection containerRef={bodyRef} /> : null}
       </div>
+      <AccessibilityWidget />
+      <SessionExpiryBanner />
+      <SessionExpiredScreen />
+      {/* "Read on Selection" toggle in AccessibilityWidget — off by default.
+          Mounted only while enabled, so zero selectionchange listeners run
+          otherwise (same "entirely disabled, not just quiet" principle as
+          Focus Mode's other integrations). */}
+      {selectionSpeechEnabled ? <TextToSpeechSelection containerRef={bodyRef} /> : null}
+      <ScreenMagnifier stageRef={stageRef} />
     </MotionConfig>
   );
 }
