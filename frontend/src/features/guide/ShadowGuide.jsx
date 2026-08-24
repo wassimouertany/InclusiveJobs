@@ -24,6 +24,7 @@ import { Check, ChevronLeft, ChevronRight, Lock, Volume2, VolumeX, X } from "luc
 import { useShadowGuide } from "./guideContext";
 import { useGuideSpeech } from "./useGuideSpeech";
 import { useFocusMode } from "../../utils/focusMode";
+import { publishGuideTarget } from "./guideTargetBus";
 
 const RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 300;
@@ -162,6 +163,16 @@ export default function ShadowGuide() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetEl]);
+
+  // ---------------------------------------------------------------------
+  // Screen Magnifier integration: let ScreenMagnifier.tsx recenter on
+  // whatever this step is currently spotlighting, without it needing to
+  // know anything about tours/steps/targeting retries.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    publishGuideTarget(isActive ? targetEl : null);
+    return () => publishGuideTarget(null);
+  }, [isActive, targetEl]);
 
   // ---------------------------------------------------------------------
   // Tooltip positioning (@floating-ui/react)
