@@ -64,5 +64,7 @@ async def ainvoke_with_fallback(
         if fallback is None:
             logger.warning("Primary LLM quota/timeout hit and no fallback configured")
             raise
-        logger.warning("Primary LLM quota/timeout hit (%s) — falling back", exc)
+        logger.warning(
+            "Primary LLM quota/timeout hit (%s) — falling back", type(exc).__name__
+        )
         return await fallback.ainvoke(payload)

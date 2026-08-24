@@ -176,7 +176,10 @@ async def _generate_content(prompt: str) -> tuple[JobSummaryContent, str]:
     except Exception as exc:
         if not is_quota_error(exc) or groq_chain is None:
             raise
-        logger.warning("Gemini quota/timeout hit (%s) — falling back to Groq", exc)
+        logger.warning(
+            "Gemini quota/timeout hit (%s) — falling back to Groq",
+            type(exc).__name__,
+        )
         used_model = SUMMARY_GROQ_MODEL
         result = await groq_chain.ainvoke(prompt)
 
@@ -222,8 +225,12 @@ async def generate_summary(job_id: str, lang: str = "en") -> JobSummaryResponse:
                 break
             except Exception as exc:
                 last_error = exc
+                # Exception type only: a provider message can echo prompt content.
                 logger.warning(
-                    "Job summary attempt %s/2 failed for %s: %s", attempt, job_id, exc
+                    "Job summary attempt %s/2 failed for %s: %s",
+                    attempt,
+                    job_id,
+                    type(exc).__name__,
                 )
         if content is None:
             raise SummaryUnavailable(
