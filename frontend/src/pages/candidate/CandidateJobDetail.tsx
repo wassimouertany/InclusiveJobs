@@ -1,17 +1,25 @@
+import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { Building, ChevronLeft, MapPin, Sparkles } from "lucide-react";
 import { Button } from "../../components/UI";
+import JobSummaryDrawer from "../../components/JobSummaryDrawer";
 import { useToast } from "../../context/ToastContext";
 import { useCandidateDashboard } from "./CandidateDashboardContext";
 import {
   formatEnumLabel,
   hasMeaningfulHtmlText,
+  normalizeToStringArray,
   splitAccommodations,
 } from "./shared";
 
 export default function CandidateJobDetail() {
   const { showToast } = useToast();
-  const { selectedJob, setSelectedJob } = useCandidateDashboard();
+  const { selectedJob, setSelectedJob, profile } = useCandidateDashboard();
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const candidateSkills = useMemo(
+    () => normalizeToStringArray(profile?.key_skills),
+    [profile?.key_skills]
+  );
 
   if (!selectedJob) return null;
 
@@ -70,7 +78,19 @@ export default function CandidateJobDetail() {
               {selectedJob.match}% AI match
             </span>
           ) : null}
-          <Button onClick={handleApply}>Apply Now</Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setSummaryOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={summaryOpen}
+              className="border-indigo-300! text-indigo-700! hover:bg-indigo-50!"
+            >
+              <Sparkles size={18} aria-hidden="true" />
+              AI Summary
+            </Button>
+            <Button onClick={handleApply}>Apply Now</Button>
+          </div>
         </div>
       </div>
 
@@ -136,6 +156,13 @@ export default function CandidateJobDetail() {
           </div>
         )}
       </div>
+
+      <JobSummaryDrawer
+        open={summaryOpen}
+        jobId={selectedJob.offerId}
+        onClose={() => setSummaryOpen(false)}
+        candidateSkills={candidateSkills}
+      />
     </motion.div>
   );
 }
