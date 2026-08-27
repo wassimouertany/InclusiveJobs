@@ -8,10 +8,11 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, MapPin, Star, ChevronDown, Loader2, ChevronLeft, Building, Send } from "lucide-react";
+import { Search, MapPin, Star, ChevronDown, Loader2, ChevronLeft, Building, Send, Sparkles } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import { apiClient } from "../../services/apiClient";
 import JobCard from "../../components/JobCard";
+import JobSummaryDrawer from "../../components/JobSummaryDrawer";
 import { useCandidateDashboardOptional } from "./CandidateDashboardContext";
 import type { JobOfferListItem } from "./apiTypes";
 import { selectedJobFromOffer } from "./selectedJobUtils";
@@ -289,6 +290,10 @@ export default function CandidateFindJobs() {
   const [locationQuery, setLocationQuery] = useState("");
   const [savedOfferIds, setSavedOfferIds] = useState<Set<string>>(() => new Set());
   const [publicSelectedJob, setPublicSelectedJob] = useState<JobOfferListItem | null>(null);
+  // The summary endpoint requires a JWT: guests get no button at all rather
+  // than a 401 on click.
+  const authToken = useAuthStore((s) => s.token);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [applyingToId, setApplyingToId] = useState<string | null>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(() => new Set());
 
@@ -627,7 +632,10 @@ export default function CandidateFindJobs() {
             <div className="bg-white p-8 rounded-2xl border border-border shadow-sm animate-in fade-in zoom-in-95 duration-200">
               <button
                 type="button"
-                onClick={() => setPublicSelectedJob(null)}
+                onClick={() => {
+                  setSummaryOpen(false);
+                  setPublicSelectedJob(null);
+                }}
                 className="text-primary font-bold flex items-center gap-2 mb-6 hover:underline"
               >
                 <ChevronLeft size={20} /> Back
@@ -660,6 +668,18 @@ export default function CandidateFindJobs() {
                     </p>
                   ) : null}
                 </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                {authToken ? (
+                  <button
+                    type="button"
+                    onClick={() => setSummaryOpen(true)}
+                    aria-haspopup="dialog"
+                    aria-expanded={summaryOpen}
+                    className="shrink-0 px-5 py-2.5 border border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 focus:ring-4 focus:ring-indigo-200 outline-none"
+                  >
+                    <Sparkles className="w-4 h-4" aria-hidden="true" /> AI Summary
+                  </button>
+                ) : null}
                 {!isRecruiter ? (
                   appliedIds.has(publicSelectedJob._id) ? (
                     <button
@@ -685,6 +705,7 @@ export default function CandidateFindJobs() {
                     </button>
                   )
                 ) : null}
+                </div>
               </div>
 
               <div className="space-y-6 text-gray-700">
@@ -727,6 +748,12 @@ export default function CandidateFindJobs() {
                   )}
                 </div>
               </div>
+
+              <JobSummaryDrawer
+                open={summaryOpen}
+                jobId={publicSelectedJob._id}
+                onClose={() => setSummaryOpen(false)}
+              />
             </div>
           ) : null}
 
